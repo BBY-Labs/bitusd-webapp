@@ -1,22 +1,19 @@
 import type { Route } from "./+types/home";
 import { useQuery } from "@tanstack/react-query";
-import { appRouter, createCallerFactory } from "workers/router";
-import type { CloudflareBindings } from "workers/router";
+import { createCaller } from "workers/router";
 import { useTRPC } from "~/lib/trpc";
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "New React Router App" },
-    { name: "description", content: "Welcome to React Router!" },
+    { title: "BitUSD" },
+    { name: "This is bitUSD", content: "Welcome to bitUSD!" },
   ];
 }
 
 export async function loader({ context }: Route.LoaderArgs) {
-  const createCaller = createCallerFactory(appRouter);
-
   const caller = createCaller({
-    env: context.cloudflare.env as CloudflareBindings,
-    executionCtx: context.cloudflare.executionCtx as ExecutionContext,
+    env: context.cloudflare.env,
+    executionCtx: context.cloudflare.ctx,
   });
 
   const { env, test } = await caller.getWorkerInfo();
@@ -27,13 +24,15 @@ export async function loader({ context }: Route.LoaderArgs) {
 export default function Home({ loaderData }: Route.ComponentProps) {
   const trpc = useTRPC();
   const greetingQuery = useQuery(trpc.hello.queryOptions("Bro"));
-  // const workerInfoQuery = useQuery(trpc.getWorkerInfo.queryOptions());
+  const workerInfoQuery = useQuery(trpc.getWorkerInfo.queryOptions());
 
   return (
     <div>
       <p>{greetingQuery.data}</p>
       <p>{loaderData.env}</p>
       <p>{loaderData.test}</p>
+      <p>{workerInfoQuery.data?.env}</p>
+      <p>{workerInfoQuery.data?.test}</p>
     </div>
   );
 }

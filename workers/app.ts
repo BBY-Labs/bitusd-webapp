@@ -21,7 +21,11 @@ app.get("*", (c) => {
   );
 
   return requestHandler(c.req.raw, {
-    cloudflare: { env: c.env, ctx: c.executionCtx },
+    cloudflare: {
+      env: c.env,
+      // ctx: Object.assign(c.executionCtx, { props: undefined }),
+      ctx: c.executionCtx,
+    },
   });
 });
 

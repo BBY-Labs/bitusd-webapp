@@ -4,7 +4,7 @@ import { z } from "zod";
 
 export interface CloudflareBindings extends Bindings {
   VALUE_FROM_CLOUDFLARE: string;
-  // Add other specific environment variables as needed
+  // Need to add other specific environment variables as needed
 }
 
 // Define the shape of our tRPC context.
@@ -21,7 +21,7 @@ const t = initTRPC.context<HonoContext>().create();
 export const publicProcedure = t.procedure;
 export const { createCallerFactory, router } = t;
 
-// Define your app's router
+// Define our app's router
 export const appRouter = router({
   hello: publicProcedure.input(z.string().nullish()).query(({ input, ctx }) => {
     return `Hello ${input}, tu vas bien?`;
@@ -36,3 +36,5 @@ export const appRouter = router({
 
 // Export type of AppRouter for client-side use
 export type AppRouter = typeof appRouter;
+
+export const createCaller = createCallerFactory(appRouter);

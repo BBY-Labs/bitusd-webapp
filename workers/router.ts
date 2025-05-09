@@ -24,11 +24,12 @@ export const router = t.router;
 // Define your app's router
 export const appRouter = router({
   hello: publicProcedure.input(z.string().nullish()).query(({ input, ctx }) => {
-    return `Hello ${input ?? "World"}!`;
+    return `Hello ${input}, tu vas bien?`;
   }),
   getWorkerInfo: publicProcedure.query(({ ctx }) => {
     return {
       env: ctx.env.VALUE_FROM_CLOUDFLARE,
+      test: "test",
     };
   }),
 });

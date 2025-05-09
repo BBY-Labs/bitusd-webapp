@@ -8,7 +8,7 @@ import {
 } from "react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createTRPCClient, httpBatchLink } from "@trpc/client";
-import { TRPCProvider } from "./utils/trpc";
+import { TRPCProvider } from "./lib/trpc";
 import { useState } from "react";
 import type { AppRouter } from "workers/router";
 

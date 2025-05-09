@@ -1,6 +1,6 @@
 import type { Route } from "./+types/home";
-import { usePrefetchQuery, useQuery } from "@tanstack/react-query";
-import { useTRPC } from "~/utils/trpc";
+import { useQuery } from "@tanstack/react-query";
+import { trpc, useTRPC } from "~/lib/trpc";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -9,26 +9,22 @@ export function meta({}: Route.MetaArgs) {
   ];
 }
 
-export function loader({ context }: Route.LoaderArgs) {
-  // const trpc = useTRPC();
+export async function loader({ context }: Route.LoaderArgs) {
+  const { env, test } = await trpc.getWorkerInfo.query();
 
-  // const workerInfoQuery = useQuery(trpc.getWorkerInfo.queryOptions());
-
-  // return { message: workerInfoQuery?.data?.env };
-
-  return { message: context.cloudflare.env.VALUE_FROM_CLOUDFLARE };
+  return { env, test };
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
   const trpc = useTRPC();
   const greetingQuery = useQuery(trpc.hello.queryOptions("Bro"));
-  const workerInfoQuery = useQuery(trpc.getWorkerInfo.queryOptions());
+  // const workerInfoQuery = useQuery(trpc.getWorkerInfo.queryOptions());
 
   return (
     <div>
       <p>{greetingQuery.data}</p>
-      <p>{loaderData.message}</p>
-      <p>{workerInfoQuery.data?.env}</p>
+      <p>{loaderData.env}</p>
+      <p>{loaderData.test}</p>
     </div>
   );
 }

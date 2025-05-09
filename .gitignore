@@ -11,3 +11,9 @@
 .wrangler
 .dev.vars*
 
+# Environment variables
+.env
+.env.*
+
+
+

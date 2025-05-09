@@ -15,7 +15,6 @@ bitusd-app/
 ├── app/                          # React Router frontend application
 │   ├── components/
 │   │   ├── ui/                   # Shadcn UI components
-│   │   └── shared/               # Other shared components
 │   ├── lib/
 │   │   ├── trpc.ts               # tRPC client setup
 │   │   ├── utils/
@@ -23,8 +22,6 @@ bitusd-app/
 │   ├── routes/                   # View components for routes (e.g., home.tsx)
 │   │   ├── home.tsx              # Example route view/component
 │   │   └── ...                   # Other route views/components
-│   ├── styles/
-│   │   └── app.css               # Main stylesheet (Tailwind)
 │   ├── types/
 │   │   ├── index.d.ts            # General frontend types
 │   │   └── react-router.d.ts     # React Router AppLoadContext types

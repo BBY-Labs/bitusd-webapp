@@ -19,7 +19,7 @@ const t = initTRPC.context<HonoContext>().create();
 
 // Export the router and procedure helpers
 export const publicProcedure = t.procedure;
-export const router = t.router;
+export const { createCallerFactory, router } = t;
 
 // Define your app's router
 export const appRouter = router({

@@ -1,6 +1,8 @@
 import type { Route } from "./+types/home";
 import { useQuery } from "@tanstack/react-query";
-import { trpc, useTRPC } from "~/lib/trpc";
+import { appRouter, createCallerFactory } from "workers/router";
+import type { CloudflareBindings } from "workers/router";
+import { useTRPC } from "~/lib/trpc";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -10,7 +12,14 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export async function loader({ context }: Route.LoaderArgs) {
-  const { env, test } = await trpc.getWorkerInfo.query();
+  const createCaller = createCallerFactory(appRouter);
+
+  const caller = createCaller({
+    env: context.cloudflare.env as CloudflareBindings,
+    executionCtx: context.cloudflare.executionCtx as ExecutionContext,
+  });
+
+  const { env, test } = await caller.getWorkerInfo();
 
   return { env, test };
 }

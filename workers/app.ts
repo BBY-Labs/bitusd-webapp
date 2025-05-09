@@ -5,7 +5,7 @@ import { createRequestHandler } from "react-router";
 
 const app = new Hono<{ Bindings: Env }>();
 
-// Add more routes here
+// Add more routes as needed here
 
 app.use(
   "/trpc/*",
@@ -23,7 +23,6 @@ app.get("*", (c) => {
   return requestHandler(c.req.raw, {
     cloudflare: {
       env: c.env,
-      // ctx: Object.assign(c.executionCtx, { props: undefined }),
       ctx: c.executionCtx,
     },
   });

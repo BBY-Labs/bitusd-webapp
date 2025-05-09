@@ -1,6 +1,6 @@
 import type { Route } from "./+types/home";
 import { useQuery } from "@tanstack/react-query";
-import { createCaller } from "workers/router";
+import { createCaller } from "workers/router"; // This line was causing the server-side code to be pulled into the client
 import { useTRPC } from "~/lib/trpc";
 
 export function meta({}: Route.MetaArgs) {
@@ -16,15 +16,17 @@ export async function loader({ context }: Route.LoaderArgs) {
     executionCtx: context.cloudflare.ctx,
   });
 
-  const { env, test } = await caller.getWorkerInfo();
+  const { env, test } = await caller.testRouter.getWorkerInfo();
 
   return { env, test };
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
   const trpc = useTRPC();
-  const greetingQuery = useQuery(trpc.hello.queryOptions("Bro"));
-  const workerInfoQuery = useQuery(trpc.getWorkerInfo.queryOptions());
+  const greetingQuery = useQuery(trpc.testRouter.hello.queryOptions("Bro"));
+  const workerInfoQuery = useQuery(
+    trpc.testRouter.getWorkerInfo.queryOptions()
+  );
 
   return (
     <div>

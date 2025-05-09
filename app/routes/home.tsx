@@ -1,6 +1,7 @@
 import type { Route } from "./+types/home";
 import { useQuery } from "@tanstack/react-query";
-import { createCaller } from "workers/router"; // This line was causing the server-side code to be pulled into the client
+import { createCaller } from "workers/router";
+import { Button } from "~/components/ui/button";
 import { useTRPC } from "~/lib/trpc";
 
 export function meta({}: Route.MetaArgs) {
@@ -30,6 +31,18 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 
   return (
     <div>
+      <div className="flex items-center justify-center p-4">
+        <div className="flex flex-col gap-4">
+          <Button
+            className=""
+            onClick={() => {
+              console.log("Hello");
+            }}
+          >
+            Click me
+          </Button>
+        </div>
+      </div>
       <p>{greetingQuery.data}</p>
       <p>{loaderData.env}</p>
       <p>{loaderData.test}</p>

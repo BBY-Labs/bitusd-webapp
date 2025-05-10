@@ -14,6 +14,7 @@ import type { AppRouter } from "workers/router";
 
 import type { Route } from "./+types/root";
 import "./app.css";
+import { StarknetProvider } from "./starknet-provider";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -85,11 +86,13 @@ export default function App() {
   );
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <TRPCProvider trpcClient={trpcClient} queryClient={queryClient}>
-        <Outlet />
-      </TRPCProvider>
-    </QueryClientProvider>
+    <StarknetProvider>
+      <QueryClientProvider client={queryClient}>
+        <TRPCProvider trpcClient={trpcClient} queryClient={queryClient}>
+          <Outlet />
+        </TRPCProvider>
+      </QueryClientProvider>
+    </StarknetProvider>
   );
 }
 

@@ -24,10 +24,20 @@ import {
 } from "~/components/ui/accordion";
 import { RefreshCw, HelpCircle, ArrowDown, Info, Check } from "lucide-react";
 import { Separator } from "~/components/ui/separator";
+import { Slider } from "~/components/ui/slider";
 import { useState } from "react";
 
 function Borrow() {
   const [selectedRate, setSelectedRate] = useState("fixed");
+  const [ltvValue, setLtvValue] = useState(53);
+
+  // Function to determine the color based on LTV value
+  const getLtvColor = () => {
+    if (ltvValue <= 25) return "bg-green-500";
+    if (ltvValue <= 50) return "bg-blue-500";
+    if (ltvValue <= 70) return "bg-yellow-500";
+    return "bg-red-500";
+  };
 
   // Handler to ensure only numeric input
   const handleNumericInput = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -228,9 +238,73 @@ function Borrow() {
                 </div>
               </div>
 
-              {/* Borrow Button */}
-              <div className="flex justify-end mt-6">
-                <Button className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-medium py-2 px-6 rounded-xl shadow-sm hover:shadow transition-all">
+              {/* LTV Slider and Borrow Button */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-4 sm:space-y-0 sm:space-x-4 mt-6">
+                <div className="w-full">
+                  <div className="flex justify-between items-center mb-2">
+                    <div className="flex items-center">
+                      <span className="text-sm font-medium text-slate-700">
+                        Loan to Value (LTV)
+                      </span>
+                      <div className="relative group ml-1">
+                        <HelpCircle className="h-3 w-3 text-slate-400 cursor-help" />
+                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-48 p-2 bg-white rounded shadow-lg text-xs text-slate-700 opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none">
+                          Ratio of the collateral value to the borrowed value.
+                          Higher values mean higher risk.
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span
+                        className={`text-sm font-bold ${
+                          ltvValue <= 25
+                            ? "text-green-600"
+                            : ltvValue <= 50
+                            ? "text-blue-600"
+                            : ltvValue <= 70
+                            ? "text-yellow-600"
+                            : "text-red-600"
+                        }`}
+                      >
+                        {ltvValue}%
+                      </span>
+                      <span className="text-xs text-slate-500 ml-1">
+                        max. 80%
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="relative">
+                    {/* Custom colored track background */}
+                    <div className="absolute left-0 top-1/2 h-1.5 w-full -translate-y-1/2 rounded-full overflow-hidden">
+                      {/* Gray background for the entire track */}
+                      <div className="absolute left-0 top-0 h-full w-full bg-slate-200"></div>
+
+                      {/* Colored portion based on current value (max 80% of width) */}
+                      <div
+                        className={`absolute left-0 top-0 h-full ${getLtvColor()} transition-all duration-300`}
+                        style={{ width: `${(ltvValue / 100) * 80}%` }}
+                      ></div>
+
+                      {/* Forbidden zone (last 20%) */}
+                      <div className="absolute left-[80%] top-0 h-full w-[20%] bg-slate-300"></div>
+                    </div>
+
+                    {/* Slider component */}
+                    <Slider
+                      value={[ltvValue]}
+                      onValueChange={(value) => {
+                        // Prevent the slider from exceeding 80%
+                        setLtvValue(Math.min(value[0], 80));
+                      }}
+                      max={100}
+                      step={1}
+                      className="z-10"
+                    />
+                  </div>
+                </div>
+
+                <Button className="w-full sm:w-auto bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-medium py-2 px-6 rounded-xl shadow-sm hover:shadow transition-all whitespace-nowrap">
                   Borrow
                 </Button>
               </div>
@@ -350,6 +424,7 @@ function Borrow() {
 
         {/* Right Panel */}
         <div className="md:col-span-1 space-y-6">
+          {/* Vault Summary Card */}
           <Card className="border border-slate-200 shadow-sm hover:shadow-md transition-shadow duration-300">
             <CardHeader className="pb-2">
               <div className="flex justify-between items-center">
@@ -363,25 +438,31 @@ function Borrow() {
                 </Button>
               </div>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="bg-slate-50 rounded-lg p-3 space-y-3">
+            <CardContent className="space-y-4 pb-3">
+              {/* Vault Collateral and Debt */}
+              <div className="space-y-3">
                 <div className="flex justify-between text-sm">
-                  <span className="text-slate-600">Vault Collateral</span>
+                  <span className="text-slate-700 font-medium">
+                    Vault Collateral
+                  </span>
                   <span className="text-right font-medium">
-                    0 → 10 wstETH - $28.75k
+                    0 → 10 BTC - $28.75k
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-slate-600">Vault Debt</span>
+                  <span className="text-slate-700 font-medium">Vault Debt</span>
                   <span className="text-right font-medium">
-                    0 → 4,000 EURA - $4.56k
+                    0 → 4,000 bitUSD - $4.56k
                   </span>
                 </div>
               </div>
 
-              <div className="bg-slate-50 rounded-lg p-3 space-y-3">
+              <Separator className="bg-slate-200" />
+
+              {/* Health Factor and Liquidation Price */}
+              <div className="space-y-3">
                 <div className="flex justify-between text-sm items-center">
-                  <span className="flex items-center text-slate-600">
+                  <span className="flex items-center text-slate-700 font-medium">
                     Health Factor
                     <div className="relative group">
                       <HelpCircle className="h-3 w-3 ml-1 text-slate-400 cursor-help" />
@@ -399,7 +480,7 @@ function Borrow() {
                   </div>
                 </div>
                 <div className="flex justify-between text-sm items-center">
-                  <span className="flex items-center text-slate-600">
+                  <span className="flex items-center text-slate-700 font-medium">
                     Liquidation Price
                     <div className="relative group">
                       <HelpCircle className="h-3 w-3 ml-1 text-slate-400 cursor-help" />
@@ -409,20 +490,25 @@ function Borrow() {
                       </div>
                     </div>
                   </span>
-                  <span className="font-medium">- → 1 wstETH = 619.5 EUR</span>
+                  <span className="font-medium">- → 1 BTC = 619.5 USD</span>
                 </div>
               </div>
 
-              <div className="h-px bg-slate-200 my-1"></div>
+              <Separator className="bg-slate-200" />
 
-              <div className="bg-slate-50 rounded-lg p-3 space-y-3">
+              {/* Balance Information */}
+              <div className="space-y-3">
                 <div className="flex justify-between text-sm">
-                  <span className="text-slate-600">EURA Balance</span>
-                  <span className="font-medium">0 → 4,000 EURA - $4.56k</span>
+                  <span className="text-slate-700 font-medium">
+                    bitUSD Balance
+                  </span>
+                  <span className="font-medium">0 → 4,000 bitUSD - $4.56k</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-slate-600">wstETH Balance</span>
-                  <span className="font-medium">0 → -10 wstETH</span>
+                  <span className="text-slate-700 font-medium">
+                    BTC Balance
+                  </span>
+                  <span className="font-medium">0 → -10 BTC</span>
                 </div>
               </div>
             </CardContent>

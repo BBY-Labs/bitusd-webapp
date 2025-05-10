@@ -148,7 +148,7 @@ export function WalletConnectorModal() {
     if (!connector) {
       return;
     }
-    await connect({ connector: connector as unknown as Connector });
+    await connect({ connector: connector as Connector });
   }
 
   const { address, chainId, connector: activeConnector } = useAccount();

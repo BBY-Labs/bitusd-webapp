@@ -1,30 +1,18 @@
-import { InjectedConnector } from "starknetkit/injected";
-import { WebWalletConnector } from "starknetkit/webwallet";
 import React from "react";
 
 import { sepolia, mainnet } from "@starknet-react/chains";
-import {
-  StarknetConfig,
-  publicProvider,
-  voyager,
-  Connector,
-} from "@starknet-react/core";
-
-const connectors = [
-  new InjectedConnector({ options: { id: "argentX", name: "Argent X" } }),
-  new InjectedConnector({ options: { id: "braavos", name: "Braavos" } }),
-  new InjectedConnector({ options: { id: "keplr", name: "Keplr" } }),
-  new InjectedConnector({ options: { id: "okxwallet", name: "OKX" } }),
-  new InjectedConnector({ options: { id: "metamask", name: "MetaMask" } }),
-  new WebWalletConnector({ url: "https://web.argent.xyz" }),
-];
+import { StarknetConfig, publicProvider, voyager } from "@starknet-react/core";
+import { connectors } from "./lib/wallet/connectors";
 
 export function StarknetProvider({ children }: { children: React.ReactNode }) {
+  const chains = [mainnet, sepolia];
+  const providers = publicProvider();
+
   return (
     <StarknetConfig
-      chains={[mainnet, sepolia]}
-      provider={publicProvider()}
-      connectors={connectors as Connector[]}
+      chains={chains}
+      provider={providers}
+      connectors={connectors}
       explorer={voyager}
     >
       {children}

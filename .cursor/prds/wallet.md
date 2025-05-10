@@ -56,10 +56,6 @@ The implementation must adhere to the following UX guidelines derived from Stark
 - Aim to auto-connect users to the mobile app when the "Connect Wallet" action is initiated, bypassing the modal if possible. This can be achieved by detecting if the user is in an in-app browser.
 - Reference: Argent Mobile section of StarknetKit documentation.
 
-### 4.4. Network Switcher Integration
-
-- Consider future integration of a network switcher (`wallet_switchStarknetChain`) to allow users to change between Starknet mainnet and testnets.
-
 ## 5. Technical Considerations
 
 - Utilize `useStarknetkitConnectModal` from StarknetKit and `useConnect` from `@starknet-react/core` for managing the connection modal and process, as demonstrated in `app/components/wallet-connector.tsx`.

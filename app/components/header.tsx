@@ -10,7 +10,7 @@ import {
 } from "~/components/ui/drawer";
 import { Button } from "~/components/ui/button";
 import { Menu as MenuIcon, X as XIcon } from "lucide-react";
-import { Link } from "react-router";
+import { Link, useLocation } from "react-router";
 
 function Logo() {
   return <div className="text-xl font-bold">Logo</div>;
@@ -60,8 +60,8 @@ function Header() {
     { name: "Stake", href: "/stake" },
     { name: "Analytics", href: "/analytics" },
   ];
-  const [activeItem, setActiveItem] = useState(navItems[0].name);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const location = useLocation();
 
   return (
     <header className="bg-white shadow-sm sticky top-0 z-50">
@@ -98,11 +98,8 @@ function Header() {
                       <DrawerClose asChild key={item.name}>
                         <NavLink
                           href={item.href}
-                          isActive={activeItem === item.name}
+                          isActive={location.pathname === item.href}
                           isMobile
-                          onClick={() => {
-                            setActiveItem(item.name);
-                          }}
                         >
                           {item.name}
                         </NavLink>
@@ -121,8 +118,7 @@ function Header() {
               <NavLink
                 key={item.name}
                 href={item.href}
-                isActive={activeItem === item.name}
-                onClick={() => setActiveItem(item.name)}
+                isActive={location.pathname === item.href}
               >
                 {item.name}
               </NavLink>

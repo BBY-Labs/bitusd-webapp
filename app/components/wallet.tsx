@@ -131,7 +131,7 @@ function WalletInfoDisplay({
   );
 }
 
-export function WalletConnectorModal() {
+export function WalletConnector() {
   const { disconnect } = useDisconnect();
   const [isOpen, setIsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -179,12 +179,9 @@ export function WalletConnectorModal() {
 
   if (!address) {
     return (
-      <button
-        onClick={connectWallet}
-        className="flex items-center justify-center text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors px-4 py-2 font-medium shadow-md hover:shadow-lg"
-      >
+      <Button onClick={connectWallet} variant="secondary">
         Connect Wallet
-      </button>
+      </Button>
     );
   }
 
@@ -200,7 +197,7 @@ export function WalletConnectorModal() {
 
   const TriggerButton = (
     <button
-      className="flex items-center gap-2 text-gray-900 dark:text-white bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 font-medium shadow-md hover:shadow-lg transition-colors"
+      className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium h-9 px-4 py-2 shadow-xs transition-all text-gray-900 dark:text-white bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-600"
       title={`Connected as ${
         starkProfile?.name || formatTruncatedAddress(address || "")
       }. Click for details.`}
@@ -209,10 +206,10 @@ export function WalletConnectorModal() {
         <img
           src={starkProfile.profilePicture}
           alt={starkProfile.name || "Profile picture"}
-          className="w-6 h-6 rounded-full object-cover"
+          className="w-6 h-6 rounded-full object-cover shrink-0"
         />
       ) : (
-        <div className="w-6 h-6">
+        <div className="w-6 h-6 shrink-0">
           <AvatarIcon />
         </div>
       )}

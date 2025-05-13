@@ -26,10 +26,52 @@ import { RefreshCw, HelpCircle, ArrowDown, Info, Check } from "lucide-react";
 import { Separator } from "~/components/ui/separator";
 import { Slider } from "~/components/ui/slider";
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useTRPC } from "~/lib/trpc";
 
 function Borrow() {
   const [selectedRate, setSelectedRate] = useState("fixed");
   const [ltvValue, setLtvValue] = useState(53);
+
+  const trpc = useTRPC();
+
+  const bitcoinPriceQuery = useQuery(trpc.testRouter.getBitcoinPrice.queryOptions());
+  const bitcoinPrice = bitcoinPriceQuery.data?.price || 0;
+
+  const bitUSDPriceQuery = useQuery(trpc.testRouter.getBitUSDPrice.queryOptions()); // TODO: could be hardcoded to 1?
+  const bitUSDPrice = bitUSDPriceQuery.data?.price || 0;
+
+  const ltv = 80; // TODO: fetch from contract
+
+  // Computes the debt limit based on the collateral amount and the LTV value
+  // - collateralAmount is user input
+  // - ltv is fetched from the contract, and expressed as a number between 0 and 100
+  const computeDebtLimit = (collateralAmount: number, ltv: number) => {
+    return collateralAmount * ltvValue / 100 * bitcoinPrice;
+  };
+
+  // Computes the liquidation price based on the collateral amount and the debt
+  // - collateralAmount is user input
+  // - debt is user input
+  // - ltv is fetched from the contract, and expressed as a number between 0 and 100
+  // Given a collateralAmount of 2 BTC, a debt of 100 bitUSD and an ltv of 80%, the liquidation price
+  // would be such that 2 BTC * liqPrice = 80 / 100 * 100
+  // i.e liqPrice = 0.8 * 100 / 2, on with variable names:
+  // liqPrice = ltv / 100  * debtValue / collateralAmount
+  const computeLiquidationPrice = (collateralAmount: number, debt: number, ltv: number) => {
+    const collateralValue = collateralAmount * bitcoinPrice;
+    const ltvPercentage = ltv / 100;
+    const debtValue = debt * bitUSDPrice;
+    return ltvPercentage * debtValue / collateralAmount;
+  };
+
+  // Computes the health factor based on the collateral amount and the debt
+  const computeHealthFactor = (collateralAmount: number, debt: number) => {
+    const liquidationPrice = computeLiquidationPrice(collateralAmount, debt, ltv);
+    const collateralValue = collateralAmount * bitcoinPrice;
+    const debtValue = debt * bitUSDPrice;
+    return collateralValue * liquidationPrice / debtValue;
+  }
 
   // Function to determine the color based on LTV value
   const getLtvColor = () => {
@@ -220,7 +262,7 @@ function Borrow() {
                       className="text-3xl md:text-4xl font-semibold h-auto p-0 border-none bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 focus:outline-none outline-none shadow-none tracking-tight text-slate-800"
                     />
                     {/* TODO: Fetch balance from tRPC call that computes price */}
-                    <p className="text-sm text-slate-500 mt-1">$0.00</p>
+                    <p className="text-sm text-slate-500 mt-1">≈ $0.00</p>
                   </div>
                   <div className="text-right">
                     <div className="w-auto rounded-full h-10 px-4 border border-slate-200 bg-white shadow-sm flex items-center justify-start">
@@ -231,8 +273,8 @@ function Borrow() {
                       </div>
                       <span className="font-medium">bitUSD</span>
                     </div>
-                    <p className="text-xs text-slate-500 mt-1">
-                      Debt Limit: 20,098k
+                    <p className="text-xs text-slate-500 mt-1"> {/* TODO: get Debt limit dynamically */ }
+                      Debt Limit: 20,098k 
                     </p>
                   </div>
                 </div>

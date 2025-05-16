@@ -84,7 +84,7 @@ function Borrow() {
                     htmlFor="collateralAmount"
                     className="text-base md:text-lg font-medium text-slate-700"
                   >
-                    You deposit
+                    You deposit (test)
                   </Label>
                   <div className="flex items-center space-x-1">
                     {/* TODO: Add logic to use e.g. 25% of balance from wallet */}

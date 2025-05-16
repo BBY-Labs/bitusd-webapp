@@ -28,50 +28,22 @@ import { Slider } from "~/components/ui/slider";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTRPC } from "~/lib/trpc";
+import { computeDebtLimit } from "~/lib/utils/calc";
 
 function Borrow() {
   const [selectedRate, setSelectedRate] = useState("fixed");
-  const [ltvValue, setLtvValue] = useState(53);
+  const [ltvValue, setLtvValue] = useState(60);
+  const [collateralAmount, setCollateralAmount] = useState(0);
+  const [borrowAmount, setBorrowAmount] = useState(0);
 
   const trpc = useTRPC();
-
-  const bitcoinPriceQuery = useQuery(trpc.testRouter.getBitcoinPrice.queryOptions());
-  const bitcoinPrice = bitcoinPriceQuery.data?.price || 0;
-
-  const bitUSDPriceQuery = useQuery(trpc.testRouter.getBitUSDPrice.queryOptions()); // TODO: could be hardcoded to 1?
-  const bitUSDPrice = bitUSDPriceQuery.data?.price || 0;
-
-  const ltv = 80; // TODO: fetch from contract
-
-  // Computes the debt limit based on the collateral amount and the LTV value
-  // - collateralAmount is user input
-  // - ltv is fetched from the contract, and expressed as a number between 0 and 100
-  const computeDebtLimit = (collateralAmount: number, ltv: number) => {
-    return collateralAmount * ltvValue / 100 * bitcoinPrice;
-  };
-
-  // Computes the liquidation price based on the collateral amount and the debt
-  // - collateralAmount is user input
-  // - debt is user input
-  // - ltv is fetched from the contract, and expressed as a number between 0 and 100
-  // Given a collateralAmount of 2 BTC, a debt of 100 bitUSD and an ltv of 80%, the liquidation price
-  // would be such that 2 BTC * liqPrice = 80 / 100 * 100
-  // i.e liqPrice = 0.8 * 100 / 2, on with variable names:
-  // liqPrice = ltv / 100  * debtValue / collateralAmount
-  const computeLiquidationPrice = (collateralAmount: number, debt: number, ltv: number) => {
-    const collateralValue = collateralAmount * bitcoinPrice;
-    const ltvPercentage = ltv / 100;
-    const debtValue = debt * bitUSDPrice;
-    return ltvPercentage * debtValue / collateralAmount;
-  };
-
-  // Computes the health factor based on the collateral amount and the debt
-  const computeHealthFactor = (collateralAmount: number, debt: number) => {
-    const liquidationPrice = computeLiquidationPrice(collateralAmount, debt, ltv);
-    const collateralValue = collateralAmount * bitcoinPrice;
-    const debtValue = debt * bitUSDPrice;
-    return collateralValue * liquidationPrice / debtValue;
-  }
+  const { data: bitcoin } = useQuery(
+    trpc.testRouter.getBitcoinPrice.queryOptions()
+  );
+  const { data: bitUSD } = useQuery(
+    trpc.testRouter.getBitUSDPrice.queryOptions()
+  );
+  const { data: ltv } = useQuery(trpc.testRouter.getLTV.queryOptions());
 
   // Function to determine the color based on LTV value
   const getLtvColor = () => {
@@ -82,12 +54,16 @@ function Borrow() {
   };
 
   // Handler to ensure only numeric input
-  const handleNumericInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleNumericInput = (
+    e: React.ChangeEvent<HTMLInputElement>,
+    setAmount: (amount: number) => void
+  ) => {
     const value = e.target.value;
     // Replace any non-numeric characters with empty string
     const numericValue = value.replace(/[^0-9.]/g, "");
     // Update the input value
     e.target.value = numericValue;
+    setAmount(Number(numericValue));
   };
   return (
     <div className="mx-auto max-w-7xl py-8 px-4 sm:px-6 lg:px-8 min-h-screen">
@@ -145,15 +121,17 @@ function Borrow() {
                       placeholder="0"
                       pattern="[0-9.]*"
                       inputMode="numeric"
-                      onChange={handleNumericInput}
+                      onChange={(e) =>
+                        handleNumericInput(e, setCollateralAmount)
+                      }
                       className="text-3xl md:text-4xl font-semibold h-auto p-0 border-none bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 focus:outline-none outline-none shadow-none tracking-tight text-slate-800"
                     />
-                    <p className="text-sm text-slate-500 mt-1">≈ $0.00</p>
+                    <p className="text-sm text-slate-500 mt-1">
+                      ≈ ${(bitcoin?.price || 0) * collateralAmount}
+                    </p>
                   </div>
                   <div className="text-right">
-                    <Select
-                      defaultValue="BTC" /* onValueChange={handleTokenChange} */
-                    >
+                    <Select defaultValue="BTC">
                       <SelectTrigger className="w-auto min-w-[120px] rounded-full h-10 pl-2 pr-3 border border-slate-200 bg-white shadow-sm hover:border-slate-300 transition-colors flex items-center">
                         <SelectValue placeholder="Token" />
                       </SelectTrigger>
@@ -258,11 +236,12 @@ function Borrow() {
                       placeholder="0"
                       pattern="[0-9.]*"
                       inputMode="numeric"
-                      onChange={handleNumericInput}
+                      onChange={(e) => handleNumericInput(e, setBorrowAmount)}
                       className="text-3xl md:text-4xl font-semibold h-auto p-0 border-none bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 focus:outline-none outline-none shadow-none tracking-tight text-slate-800"
                     />
-                    {/* TODO: Fetch balance from tRPC call that computes price */}
-                    <p className="text-sm text-slate-500 mt-1">≈ $0.00</p>
+                    <p className="text-sm text-slate-500 mt-1">
+                      ≈ ${(bitUSD?.price || 0) * borrowAmount}
+                    </p>
                   </div>
                   <div className="text-right">
                     <div className="w-auto rounded-full h-10 px-4 border border-slate-200 bg-white shadow-sm flex items-center justify-start">
@@ -273,8 +252,13 @@ function Borrow() {
                       </div>
                       <span className="font-medium">bitUSD</span>
                     </div>
-                    <p className="text-xs text-slate-500 mt-1"> {/* TODO: get Debt limit dynamically */ }
-                      Debt Limit: 20,098k 
+                    <p className="text-xs text-slate-500 mt-1">
+                      Debt Limit: $
+                      {computeDebtLimit(
+                        collateralAmount,
+                        (ltv?.ltv || 0) / 100,
+                        bitcoin?.price || 0
+                      )}
                     </p>
                   </div>
                 </div>

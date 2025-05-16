@@ -7,7 +7,8 @@ import {
 
 export default [
   layout("routes/dashboard.tsx", [
-    index("routes/home.tsx"),
-    route("borrow", "routes/borrow.tsx"),
+    index("routes/borrow.tsx"),
+    route("borrow", "routes/home.tsx"),
+    route("test", "routes/test.tsx"),
   ]),
 ] satisfies RouteConfig;

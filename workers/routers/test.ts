@@ -23,6 +23,11 @@ export const testRouter = router({
       price: 1.00,
     };
   }),
+  getLTV: publicProcedure.query(({ ctx }) => {
+    return {
+      ltv: 80,
+    };
+  }),
 });
 
 export type TestRouter = typeof testRouter;

@@ -10,13 +10,13 @@ import {
 } from "~/components/ui/drawer";
 import { Button } from "~/components/ui/button";
 import { Separator } from "~/components/ui/separator";
-import { 
-  Menu as MenuIcon, 
+import {
+  Menu as MenuIcon,
   X as XIcon,
   Home as HomeIcon,
   DollarSign as DollarIcon,
   BarChart3 as ChartIcon,
-  Layers as LayersIcon
+  Layers as LayersIcon,
 } from "lucide-react";
 import { Link, useLocation } from "react-router";
 
@@ -75,10 +75,10 @@ function NavLink({
 
 function Header() {
   const navItems = [
-    { name: "Dashboard", href: "/", icon: <HomeIcon size={16} /> },
-    { name: "Borrow", href: "/borrow", icon: <DollarIcon size={16} /> },
-    { name: "Stake", href: "/stake", icon: <LayersIcon size={16} /> },
-    { name: "Analytics", href: "/analytics", icon: <ChartIcon size={16} /> },
+    // { name: "Dashboard", href: "/", icon: <HomeIcon size={16} /> },
+    { name: "Borrow", href: "/", icon: <DollarIcon size={16} /> },
+    // { name: "Stake", href: "/stake", icon: <LayersIcon size={16} /> },
+    // { name: "Analytics", href: "/analytics", icon: <ChartIcon size={16} /> },
   ];
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const location = useLocation();
@@ -96,7 +96,11 @@ function Header() {
                 onOpenChange={setIsMobileMenuOpen}
               >
                 <DrawerTrigger asChild>
-                  <Button variant="ghost" size="icon" className="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100"
+                  >
                     <MenuIcon className="h-5 w-5" />
                     <span className="sr-only">Open menu</span>
                   </Button>
@@ -106,7 +110,11 @@ function Header() {
                     <DrawerTitle className="flex justify-between items-center text-gray-900 dark:text-gray-100">
                       <Logo />
                       <DrawerClose asChild>
-                        <Button variant="ghost" size="icon" className="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100"
+                        >
                           <XIcon className="h-5 w-5" />
                           <span className="sr-only">Close menu</span>
                         </Button>

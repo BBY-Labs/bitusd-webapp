@@ -11,23 +11,6 @@ export const testRouter = router({
       test: "test",
     };
   }),
-  getBitcoinPrice: publicProcedure.query(async ({ ctx }) => {
-    const response = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"); // 
-    const data = await response.json() as { bitcoin: { usd: number } };
-    return {
-      price: data.bitcoin.usd,
-    };
-  }),
-  getBitUSDPrice: publicProcedure.query(({ ctx }) => {
-    return {
-      price: 1.00,
-    };
-  }),
-  getLTV: publicProcedure.query(({ ctx }) => {
-    return {
-      ltv: 80,
-    };
-  }),
 });
 
 export type TestRouter = typeof testRouter;

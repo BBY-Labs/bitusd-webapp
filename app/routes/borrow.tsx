@@ -1,4 +1,5 @@
 import { Button } from "~/components/ui/button";
+import { z, ZodError } from "zod/v4";
 import {
   Card,
   CardContent,
@@ -28,22 +29,85 @@ import { Slider } from "~/components/ui/slider";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTRPC } from "~/lib/trpc";
-import { computeDebtLimit } from "~/lib/utils/calc";
+import {
+  computeBorrowAmountFromLTV,
+  computeDebtLimit,
+  computeHealthFactor,
+  computeLiquidationPrice,
+  computeLTVFromBorrowAmount,
+  MAX_LTV,
+} from "~/lib/utils/calc";
+import type { Route } from "./+types/dashboard";
+
+const createBorrowFormSchema = (currentBitcoinPrice: number | undefined) =>
+  z
+    .object({
+      collateralAmount: z
+        .number()
+        .positive({ message: "Collateral amount must be greater than 0." })
+        .optional(),
+      borrowAmount: z
+        .number()
+        .positive({ message: "Borrow amount must be greater than 0." })
+        .optional(),
+    })
+    .refine(
+      (data) => {
+        // Refinement 1: Ensure collateral is present if borrow amount is entered
+        if (data.borrowAmount && data.borrowAmount > 0) {
+          return data.collateralAmount && data.collateralAmount > 0;
+        }
+        return true;
+      },
+      {
+        message:
+          "Please enter a valid collateral amount before specifying a borrow amount.",
+        path: ["borrowAmount"],
+      }
+    )
+    .refine(
+      (data) => {
+        // Refinement 2: Check max borrow amount based on collateral, price and Minimum Collateral Ratio
+        if (
+          data.collateralAmount &&
+          data.collateralAmount > 0 &&
+          data.borrowAmount &&
+          data.borrowAmount > 0 &&
+          currentBitcoinPrice &&
+          currentBitcoinPrice > 0
+        ) {
+          const maxBorrowable = computeDebtLimit(
+            data.collateralAmount,
+            currentBitcoinPrice
+          );
+          return data.borrowAmount <= maxBorrowable;
+        }
+        return true; // Pass if not all conditions for this specific check are met
+      },
+      {
+        message: "Not enough collateral to borrow this amount.",
+        path: ["borrowAmount"],
+      }
+    );
 
 function Borrow() {
   const [selectedRate, setSelectedRate] = useState("fixed");
-  const [ltvValue, setLtvValue] = useState(60);
-  const [collateralAmount, setCollateralAmount] = useState(0);
-  const [borrowAmount, setBorrowAmount] = useState(0);
+  const [collateralAmount, setCollateralAmount] = useState<number | undefined>(
+    undefined
+  );
+  const [borrowAmount, setBorrowAmount] = useState<number | undefined>(
+    undefined
+  );
+  const [ltvValue, setLtvValue] = useState(0);
+  const [formErrors, setFormErrors] = useState<ZodError | null>(null);
 
   const trpc = useTRPC();
   const { data: bitcoin } = useQuery(
-    trpc.testRouter.getBitcoinPrice.queryOptions()
+    trpc.priceRouter.getBitcoinPrice.queryOptions()
   );
   const { data: bitUSD } = useQuery(
-    trpc.testRouter.getBitUSDPrice.queryOptions()
+    trpc.priceRouter.getBitUSDPrice.queryOptions()
   );
-  const { data: ltv } = useQuery(trpc.testRouter.getLTV.queryOptions());
 
   // Function to determine the color based on LTV value
   const getLtvColor = () => {
@@ -53,18 +117,83 @@ function Borrow() {
     return "bg-red-500";
   };
 
-  // Handler to ensure only numeric input
-  const handleNumericInput = (
-    e: React.ChangeEvent<HTMLInputElement>,
-    setAmount: (amount: number) => void
+  const validateAndUpdateFormState = (
+    currentCollateral: number | undefined,
+    currentBorrow: number | undefined,
+    currentBtcPrice: number | undefined
   ) => {
-    const value = e.target.value;
-    // Replace any non-numeric characters with empty string
-    const numericValue = value.replace(/[^0-9.]/g, "");
-    // Update the input value
-    e.target.value = numericValue;
-    setAmount(Number(numericValue));
+    const schema = createBorrowFormSchema(currentBtcPrice);
+    const validationResult = schema.safeParse({
+      collateralAmount:
+        currentCollateral === undefined ? undefined : currentCollateral,
+      borrowAmount: currentBorrow === undefined ? undefined : currentBorrow,
+    });
+
+    if (!validationResult.success) {
+      setFormErrors(validationResult.error);
+    } else {
+      setFormErrors(null);
+    }
+
+    if (
+      currentCollateral &&
+      currentCollateral > 0 &&
+      currentBorrow !== undefined && // Allow 0 borrow amount for LTV calculation
+      currentBtcPrice &&
+      currentBtcPrice > 0
+    ) {
+      // If borrow is 0, LTV is 0. If borrow > 0, calculate it.
+      const ltv =
+        currentBorrow > 0
+          ? computeLTVFromBorrowAmount(
+              currentBorrow,
+              currentCollateral,
+              currentBtcPrice
+            )
+          : 0;
+      setLtvValue(Math.round(ltv * 100)); // Display LTV as a whole number
+    } else {
+      setLtvValue(0); // Reset LTV if inputs aren't suitable for calculation
+    }
   };
+
+  const handleCollateralChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const currentCollateralAmount = Number(e.target.value);
+    setCollateralAmount(currentCollateralAmount);
+
+    validateAndUpdateFormState(
+      currentCollateralAmount,
+      borrowAmount,
+      bitcoin?.price
+    );
+  };
+
+  const handleBorrowAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const currentNumericBorrowAmount = Number(e.target.value);
+    setBorrowAmount(currentNumericBorrowAmount);
+
+    validateAndUpdateFormState(
+      collateralAmount,
+      currentNumericBorrowAmount,
+      bitcoin?.price
+    );
+  };
+
+  const handleLtvSliderChange = (value: number[]) => {
+    const intendedLtvPercentage = Math.min(value[0], MAX_LTV * 100);
+    const newBorrowAmount = computeBorrowAmountFromLTV(
+      intendedLtvPercentage,
+      collateralAmount || 0,
+      bitcoin?.price || 0
+    );
+    setBorrowAmount(newBorrowAmount);
+    validateAndUpdateFormState(
+      collateralAmount,
+      newBorrowAmount,
+      bitcoin?.price
+    );
+  };
+
   return (
     <div className="mx-auto max-w-7xl py-8 px-4 sm:px-6 lg:px-8 min-h-screen">
       <div className="flex justify-between items-baseline">
@@ -118,17 +247,27 @@ function Borrow() {
                   <div className="flex-grow">
                     <Input
                       id="collateralAmount"
+                      type="number"
                       placeholder="0"
                       pattern="[0-9.]*"
-                      inputMode="numeric"
-                      onChange={(e) =>
-                        handleNumericInput(e, setCollateralAmount)
-                      }
+                      // inputMode="numeric"
+                      onChange={handleCollateralChange}
+                      value={collateralAmount ? collateralAmount : ""}
                       className="text-3xl md:text-4xl font-semibold h-auto p-0 border-none bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 focus:outline-none outline-none shadow-none tracking-tight text-slate-800"
                     />
                     <p className="text-sm text-slate-500 mt-1">
-                      ≈ ${(bitcoin?.price || 0) * collateralAmount}
+                      ≈ ${(bitcoin?.price || 0) * (collateralAmount || 0)}
                     </p>
+                    {formErrors?.issues.map((issue) =>
+                      issue.path.includes("collateralAmount") ? (
+                        <p
+                          key={issue.code + issue.path.join(".")}
+                          className="text-xs text-red-500 mt-1"
+                        >
+                          {issue.message}
+                        </p>
+                      ) : null
+                    )}
                   </div>
                   <div className="text-right">
                     <Select defaultValue="BTC">
@@ -233,15 +372,27 @@ function Borrow() {
                   <div className="flex-grow">
                     <Input
                       id="borrowAmount"
+                      type="number"
                       placeholder="0"
                       pattern="[0-9.]*"
                       inputMode="numeric"
-                      onChange={(e) => handleNumericInput(e, setBorrowAmount)}
+                      onChange={handleBorrowAmountChange}
+                      value={borrowAmount ? borrowAmount : ""}
                       className="text-3xl md:text-4xl font-semibold h-auto p-0 border-none bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 focus:outline-none outline-none shadow-none tracking-tight text-slate-800"
                     />
                     <p className="text-sm text-slate-500 mt-1">
-                      ≈ ${(bitUSD?.price || 0) * borrowAmount}
+                      ≈ ${(bitUSD?.price || 0) * (borrowAmount || 0)}
                     </p>
+                    {formErrors?.issues.map((issue) =>
+                      issue.path.includes("borrowAmount") ? (
+                        <p
+                          key={issue.code + issue.path.join(".")}
+                          className="text-xs text-red-500 mt-1"
+                        >
+                          {issue.message}
+                        </p>
+                      ) : null
+                    )}
                   </div>
                   <div className="text-right">
                     <div className="w-auto rounded-full h-10 px-4 border border-slate-200 bg-white shadow-sm flex items-center justify-start">
@@ -255,8 +406,7 @@ function Borrow() {
                     <p className="text-xs text-slate-500 mt-1">
                       Debt Limit: $
                       {computeDebtLimit(
-                        collateralAmount,
-                        (ltv?.ltv || 0) / 100,
+                        collateralAmount || 0,
                         bitcoin?.price || 0
                       )}
                     </p>
@@ -295,7 +445,7 @@ function Borrow() {
                         {ltvValue}%
                       </span>
                       <span className="text-xs text-slate-500 ml-1">
-                        max. 80%
+                        max. {(MAX_LTV * 100).toFixed(0)}%
                       </span>
                     </div>
                   </div>
@@ -306,10 +456,10 @@ function Borrow() {
                       {/* Gray background for the entire track */}
                       <div className="absolute left-0 top-0 h-full w-full bg-slate-200"></div>
 
-                      {/* Colored portion based on current value (max 80% of width) */}
+                      {/* Colored portion based on current value (max 90% of width) */}
                       <div
                         className={`absolute left-0 top-0 h-full ${getLtvColor()} transition-all duration-300`}
-                        style={{ width: `${(ltvValue / 100) * 80}%` }}
+                        style={{ width: `${ltvValue * MAX_LTV}%` }}
                       ></div>
 
                       {/* Forbidden zone (last 20%) */}
@@ -318,11 +468,9 @@ function Borrow() {
 
                     {/* Slider component */}
                     <Slider
+                      disabled={!collateralAmount || collateralAmount <= 0}
                       value={[ltvValue]}
-                      onValueChange={(value) => {
-                        // Prevent the slider from exceeding 80%
-                        setLtvValue(Math.min(value[0], 80));
-                      }}
+                      onValueChange={handleLtvSliderChange}
                       max={100}
                       step={1}
                       className="z-10"
@@ -330,7 +478,15 @@ function Borrow() {
                   </div>
                 </div>
 
-                <Button className="w-full sm:w-auto bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-medium py-2 px-6 rounded-xl shadow-sm hover:shadow transition-all whitespace-nowrap">
+                <Button
+                  disabled={
+                    !!formErrors ||
+                    !collateralAmount ||
+                    !borrowAmount ||
+                    borrowAmount <= 0
+                  }
+                  className="w-full sm:w-auto bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-medium py-2 px-6 rounded-xl shadow-sm hover:shadow transition-all whitespace-nowrap"
+                >
                   Borrow
                 </Button>
               </div>
@@ -454,7 +610,9 @@ function Borrow() {
           <Card className="border border-slate-200 shadow-sm hover:shadow-md transition-shadow duration-300">
             <CardHeader className="pb-2">
               <div className="flex justify-between items-center">
-                <CardTitle className="text-slate-800">Vault Summary</CardTitle>
+                <CardTitle className="text-slate-800">
+                  Position Summary
+                </CardTitle>
                 <Button
                   variant="outline"
                   size="icon"
@@ -465,26 +623,6 @@ function Borrow() {
               </div>
             </CardHeader>
             <CardContent className="space-y-4 pb-3">
-              {/* Vault Collateral and Debt */}
-              <div className="space-y-3">
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-700 font-medium">
-                    Vault Collateral
-                  </span>
-                  <span className="text-right font-medium">
-                    0 → 10 BTC - $28.75k
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-700 font-medium">Vault Debt</span>
-                  <span className="text-right font-medium">
-                    0 → 4,000 bitUSD - $4.56k
-                  </span>
-                </div>
-              </div>
-
-              <Separator className="bg-slate-200" />
-
               {/* Health Factor and Liquidation Price */}
               <div className="space-y-3">
                 <div className="flex justify-between text-sm items-center">
@@ -501,7 +639,11 @@ function Borrow() {
                   <div className="flex items-center">
                     <div className="w-2 h-2 rounded-full bg-green-500 mr-1"></div>
                     <span className="text-green-600 font-semibold">
-                      ∞ → 5.02
+                      {computeHealthFactor(
+                        collateralAmount || 0,
+                        borrowAmount || 0,
+                        bitcoin?.price || 0
+                      )}
                     </span>
                   </div>
                 </div>
@@ -516,27 +658,17 @@ function Borrow() {
                       </div>
                     </div>
                   </span>
-                  <span className="font-medium">- → 1 BTC = 619.5 USD</span>
+                  <span className="font-medium">
+                    {computeLiquidationPrice(
+                      collateralAmount || 0,
+                      borrowAmount || 0,
+                      bitUSD?.price || 0
+                    )}
+                  </span>
                 </div>
               </div>
 
               <Separator className="bg-slate-200" />
-
-              {/* Balance Information */}
-              <div className="space-y-3">
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-700 font-medium">
-                    bitUSD Balance
-                  </span>
-                  <span className="font-medium">0 → 4,000 bitUSD - $4.56k</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-700 font-medium">
-                    BTC Balance
-                  </span>
-                  <span className="font-medium">0 → -10 BTC</span>
-                </div>
-              </div>
             </CardContent>
             <CardFooter className="pt-0">
               <Accordion type="single" collapsible className="w-full">
@@ -568,3 +700,10 @@ function Borrow() {
 }
 
 export default Borrow;
+
+export function meta({}: Route.MetaArgs) {
+  return [
+    { title: "BitUSD" },
+    { name: "This is bitUSD", content: "Welcome to bitUSD!" },
+  ];
+}

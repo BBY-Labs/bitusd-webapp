@@ -1,10 +1,11 @@
+import { priceRouter } from "./routers/prices";
 import { testRouter } from "./routers/test";
-import { createCallerFactory, publicProcedure, router } from "./trpc";
+import { createCallerFactory, router } from "./trpc";
 
 // Define our app's router
 export const appRouter = router({
   testRouter,
-  
+  priceRouter,
 });
 
 // Export type of AppRouter for client-side use

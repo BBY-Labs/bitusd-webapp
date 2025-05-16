@@ -1,51 +1,82 @@
-// Computes the debt limit based on the collateral amount and the LTV value
-// - collateralAmount is user input
-// - ltv is fetched from the contract, and expressed as a number between 0 and 100
+export const MINIMUM_COLLATERAL_RATIO = 1.1;
+export const MAX_LTV = 1 / MINIMUM_COLLATERAL_RATIO;
+
+/**
+ * Computes the debt limit based on the collateral amount, the collateral price and the minimum collateral ratio
+ * @param collateralAmount - The amount of collateral in BTC
+ * @param bitcoinPrice - The price of Bitcoin in USD
+ * @returns The debt limit in USD
+ */
 export function computeDebtLimit(
   collateralAmount: number,
-  ltvValue: number,
   bitcoinPrice: number
 ) {
-  return ((collateralAmount * ltvValue) / 100) * bitcoinPrice;
+  const collateralValue = collateralAmount * bitcoinPrice;
+  return collateralValue / MINIMUM_COLLATERAL_RATIO;
 }
 
-// Computes the liquidation price based on the collateral amount and the debt
-// - collateralAmount is user input
-// - debt is user input
-// - ltv is fetched from the contract, and expressed as a number between 0 and 100
-// Given a collateralAmount of 2 BTC, a debt of 100 bitUSD and an ltv of 80%, the liquidation price
-// would be such that 2 BTC * liqPrice = 80 / 100 * 100
-// i.e liqPrice = 0.8 * 100 / 2, on with variable names:
-// liqPrice = ltv / 100  * debtValue / collateralAmount
+/**
+ * Computes the liquidation price based on the collateral amount, the debt and the bitUSD price
+ * @param collateralAmount - The amount of collateral in BTC
+ * @param debt - The amount of debt in bitUSD
+ * @param bitUSDPrice - The price of bitUSD in USD
+ * @returns The liquidation price in USD
+ */
 export function computeLiquidationPrice(
   collateralAmount: number,
   debt: number,
-  ltv: number,
-  bitcoinPrice: number,
   bitUSDPrice: number
 ) {
-  const collateralValue = collateralAmount * bitcoinPrice;
-  const ltvPercentage = ltv / 100;
+  const collateralValue = collateralAmount * bitUSDPrice;
   const debtValue = debt * bitUSDPrice;
-  return (ltvPercentage * debtValue) / collateralAmount;
+
+  return (debtValue * MINIMUM_COLLATERAL_RATIO) / collateralValue;
 }
 
-// Computes the health factor based on the collateral amount and the debt
+/**
+ * Computes the health factor based on the collateral amount and the debt
+ * @param collateralAmount - The amount of collateral in BTC
+ * @param debtAmount - The amount of debt in bitUSD
+ * @param bitcoinPrice - The price of Bitcoin in USD
+ * @returns The health factor
+ */
 export function computeHealthFactor(
   collateralAmount: number,
-  debt: number,
-  ltv: number,
-  bitcoinPrice: number,
-  bitUSDPrice: number
+  debtAmount: number,
+  bitcoinPrice: number
 ) {
-  const liquidationPrice = computeLiquidationPrice(
-    collateralAmount,
-    debt,
-    ltv,
-    bitcoinPrice,
-    bitUSDPrice
-  );
   const collateralValue = collateralAmount * bitcoinPrice;
-  const debtValue = debt * bitUSDPrice;
-  return (collateralValue * liquidationPrice) / debtValue;
+  return collateralValue / (debtAmount * MINIMUM_COLLATERAL_RATIO);
+}
+
+/**
+ * Computes the borrow amount from the LTV
+ * @param ltv - The LTV
+ * @param collateralAmount - The amount of collateral in BTC
+ * @param bitcoinPrice - The price of Bitcoin in USD
+ * @returns The borrow amount in BTC
+ */
+export function computeBorrowAmountFromLTV(
+  ltv: number,
+  collateralAmount: number,
+  bitcoinPrice: number
+) {
+  const collateralValue = collateralAmount * bitcoinPrice;
+  return (collateralValue * ltv) / 100;
+}
+
+/**
+ * Computes the LTV from the borrow amount
+ * @param borrowAmount - The amount of borrow in bitUSD
+ * @param collateralAmount - The amount of collateral in BTC
+ * @param bitcoinPrice - The price of Bitcoin in USD
+ * @returns The LTV
+ */
+export function computeLTVFromBorrowAmount(
+  borrowAmount: number,
+  collateralAmount: number,
+  bitcoinPrice: number
+) {
+  const collateralValue = collateralAmount * bitcoinPrice;
+  return borrowAmount / collateralValue;
 }

@@ -1,4 +1,5 @@
 import { Button } from "~/components/ui/button";
+import { NumericFormat, type NumberFormatValues } from "react-number-format";
 import { z, ZodError } from "zod/v4";
 import {
   Card,
@@ -23,7 +24,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "~/components/ui/accordion";
-import { RefreshCw, HelpCircle, ArrowDown, Info, Check } from "lucide-react";
+import { RefreshCw, HelpCircle, ArrowDown, Check } from "lucide-react";
 import { Separator } from "~/components/ui/separator";
 import { Slider } from "~/components/ui/slider";
 import { useState } from "react";
@@ -35,11 +36,15 @@ import {
   computeHealthFactor,
   computeLiquidationPrice,
   computeLTVFromBorrowAmount,
+  MAX_LIMIT,
   MAX_LTV,
 } from "~/lib/utils/calc";
 import type { Route } from "./+types/dashboard";
 
-const createBorrowFormSchema = (currentBitcoinPrice: number | undefined) =>
+const createBorrowFormSchema = (
+  currentBitcoinPrice: number | undefined,
+  currentBitUSDPrice: number | undefined
+) =>
   z
     .object({
       collateralAmount: z
@@ -88,6 +93,26 @@ const createBorrowFormSchema = (currentBitcoinPrice: number | undefined) =>
         message: "Not enough collateral to borrow this amount.",
         path: ["borrowAmount"],
       }
+    )
+    .refine(
+      (data) => {
+        if (
+          data.borrowAmount &&
+          data.borrowAmount > 0 &&
+          currentBitUSDPrice &&
+          currentBitUSDPrice > 0
+        ) {
+          const borrowValue = data.borrowAmount * currentBitUSDPrice;
+          if (borrowValue < 100) {
+            return false; // Invalid if borrow value is less than $100
+          }
+        }
+        return true;
+      },
+      {
+        message: "Minimum borrow amount is $100.",
+        path: ["borrowAmount"], // Error associated with the borrow amount field
+      }
     );
 
 function Borrow() {
@@ -120,9 +145,10 @@ function Borrow() {
   const validateAndUpdateFormState = (
     currentCollateral: number | undefined,
     currentBorrow: number | undefined,
-    currentBtcPrice: number | undefined
+    currentBtcPrice: number | undefined,
+    currentBitUSDPrice: number | undefined
   ) => {
-    const schema = createBorrowFormSchema(currentBtcPrice);
+    const schema = createBorrowFormSchema(currentBtcPrice, currentBitUSDPrice);
     const validationResult = schema.safeParse({
       collateralAmount:
         currentCollateral === undefined ? undefined : currentCollateral,
@@ -157,25 +183,27 @@ function Borrow() {
     }
   };
 
-  const handleCollateralChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const currentCollateralAmount = Number(e.target.value);
+  const handleCollateralChange = (values: NumberFormatValues) => {
+    const currentCollateralAmount = Number(values.value);
     setCollateralAmount(currentCollateralAmount);
 
     validateAndUpdateFormState(
       currentCollateralAmount,
       borrowAmount,
-      bitcoin?.price
+      bitcoin?.price,
+      bitUSD?.price
     );
   };
 
-  const handleBorrowAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const currentNumericBorrowAmount = Number(e.target.value);
+  const handleBorrowAmountChange = (values: NumberFormatValues) => {
+    const currentNumericBorrowAmount = Number(values.value);
     setBorrowAmount(currentNumericBorrowAmount);
 
     validateAndUpdateFormState(
       collateralAmount,
       currentNumericBorrowAmount,
-      bitcoin?.price
+      bitcoin?.price,
+      bitUSD?.price
     );
   };
 
@@ -190,8 +218,28 @@ function Borrow() {
     validateAndUpdateFormState(
       collateralAmount,
       newBorrowAmount,
-      bitcoin?.price
+      bitcoin?.price,
+      bitUSD?.price
     );
+  };
+
+  const getButtonText = () => {
+    if (formErrors) {
+      const isCollateralTooSmallErrorPresent = formErrors.issues.some(
+        (issue) =>
+          issue.path.includes("borrowAmount") &&
+          issue.message === "Minimum borrow amount is $100."
+      );
+      if (isCollateralTooSmallErrorPresent) {
+        return "Borrow amount is too small";
+      }
+      // TODO: Add logic to check if collateral balance in wallet is too low
+      // if (isCollateralBalanceTooLow) {
+      //   return "Insufficient collateral balance";
+      // }
+    }
+
+    return "Borrow";
   };
 
   return (
@@ -245,19 +293,32 @@ function Borrow() {
                 </div>
                 <div className="flex items-start justify-between space-x-4">
                   <div className="flex-grow">
-                    <Input
+                    <NumericFormat
                       id="collateralAmount"
-                      type="number"
+                      customInput={Input}
+                      thousandSeparator=","
                       placeholder="0"
-                      pattern="[0-9.]*"
-                      // inputMode="numeric"
-                      onChange={handleCollateralChange}
-                      value={collateralAmount ? collateralAmount : ""}
+                      inputMode="decimal"
+                      allowNegative={false}
+                      decimalScale={7}
+                      value={collateralAmount}
+                      onValueChange={handleCollateralChange}
+                      isAllowed={(values) => {
+                        const { floatValue } = values;
+                        if (floatValue === undefined) return true;
+                        return floatValue < MAX_LIMIT;
+                      }}
                       className="text-3xl md:text-4xl font-semibold h-auto p-0 border-none bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 focus:outline-none outline-none shadow-none tracking-tight text-slate-800"
                     />
-                    <p className="text-sm text-slate-500 mt-1">
-                      ≈ ${(bitcoin?.price || 0) * (collateralAmount || 0)}
-                    </p>
+                    <NumericFormat
+                      className="text-sm text-slate-500 mt-1"
+                      displayType="text"
+                      value={(bitcoin?.price || 0) * (collateralAmount || 0)}
+                      prefix={"≈ $"}
+                      thousandSeparator=","
+                      decimalScale={2}
+                      fixedDecimalScale
+                    />
                     {formErrors?.issues.map((issue) =>
                       issue.path.includes("collateralAmount") ? (
                         <p
@@ -370,19 +431,32 @@ function Borrow() {
                 </div>
                 <div className="flex items-start justify-between space-x-2 mt-2">
                   <div className="flex-grow">
-                    <Input
+                    <NumericFormat
                       id="borrowAmount"
-                      type="number"
+                      customInput={Input}
+                      thousandSeparator=","
                       placeholder="0"
-                      pattern="[0-9.]*"
-                      inputMode="numeric"
-                      onChange={handleBorrowAmountChange}
-                      value={borrowAmount ? borrowAmount : ""}
+                      inputMode="decimal"
+                      allowNegative={false}
+                      decimalScale={7}
+                      value={borrowAmount}
+                      onValueChange={handleBorrowAmountChange}
+                      isAllowed={(values) => {
+                        const { floatValue } = values;
+                        if (floatValue === undefined) return true;
+                        return floatValue < MAX_LIMIT;
+                      }}
                       className="text-3xl md:text-4xl font-semibold h-auto p-0 border-none bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 focus:outline-none outline-none shadow-none tracking-tight text-slate-800"
                     />
-                    <p className="text-sm text-slate-500 mt-1">
-                      ≈ ${(bitUSD?.price || 0) * (borrowAmount || 0)}
-                    </p>
+                    <NumericFormat
+                      className="text-sm text-slate-500 mt-1"
+                      displayType="text"
+                      value={(bitUSD?.price || 0) * (borrowAmount || 0)}
+                      prefix={"≈ $"}
+                      thousandSeparator=","
+                      decimalScale={2}
+                      fixedDecimalScale
+                    />
                     {formErrors?.issues.map((issue) =>
                       issue.path.includes("borrowAmount") ? (
                         <p
@@ -403,19 +477,12 @@ function Borrow() {
                       </div>
                       <span className="font-medium">bitUSD</span>
                     </div>
-                    <p className="text-xs text-slate-500 mt-1">
-                      Debt Limit: $
-                      {computeDebtLimit(
-                        collateralAmount || 0,
-                        bitcoin?.price || 0
-                      )}
-                    </p>
                   </div>
                 </div>
               </div>
 
               {/* LTV Slider and Borrow Button */}
-              <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-4 sm:space-y-0 sm:space-x-4 mt-6">
+              <div className="flex flex-col items-start space-y-4 mt-6">
                 <div className="w-full">
                   <div className="flex justify-between items-center mb-2">
                     <div className="flex items-center">
@@ -485,9 +552,9 @@ function Borrow() {
                     !borrowAmount ||
                     borrowAmount <= 0
                   }
-                  className="w-full sm:w-auto bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-medium py-2 px-6 rounded-xl shadow-sm hover:shadow transition-all whitespace-nowrap"
+                  className="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-medium py-2 px-6 rounded-xl shadow-sm hover:shadow transition-all whitespace-nowrap"
                 >
-                  Borrow
+                  {getButtonText()}
                 </Button>
               </div>
 
@@ -627,6 +694,29 @@ function Borrow() {
               <div className="space-y-3">
                 <div className="flex justify-between text-sm items-center">
                   <span className="flex items-center text-slate-700 font-medium">
+                    Debt Limit
+                    <div className="relative group">
+                      <HelpCircle className="h-3 w-3 ml-1 text-slate-400 cursor-help" />
+                      <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-48 p-2 bg-white rounded shadow-lg text-xs text-slate-700 opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none">
+                        The maximum amount you can borrow.
+                      </div>
+                    </div>
+                  </span>
+                  <NumericFormat
+                    className="font-medium"
+                    displayType="text"
+                    value={computeDebtLimit(
+                      collateralAmount || 0,
+                      bitcoin?.price || 0
+                    )}
+                    prefix={"$"}
+                    thousandSeparator=","
+                    decimalScale={2}
+                    fixedDecimalScale
+                  />
+                </div>
+                <div className="flex justify-between text-sm items-center">
+                  <span className="flex items-center text-slate-700 font-medium">
                     Health Factor
                     <div className="relative group">
                       <HelpCircle className="h-3 w-3 ml-1 text-slate-400 cursor-help" />
@@ -636,15 +726,19 @@ function Borrow() {
                       </div>
                     </div>
                   </span>
-                  <div className="flex items-center">
-                    <div className="w-2 h-2 rounded-full bg-green-500 mr-1"></div>
-                    <span className="text-green-600 font-semibold">
-                      {computeHealthFactor(
+                  <div className="flex items-center justify-between">
+                    <NumericFormat
+                      className="text-green-600 font-semibold"
+                      displayType="text"
+                      value={computeHealthFactor(
                         collateralAmount || 0,
                         borrowAmount || 0,
                         bitcoin?.price || 0
                       )}
-                    </span>
+                      thousandSeparator=","
+                      decimalScale={2}
+                      fixedDecimalScale
+                    />
                   </div>
                 </div>
                 <div className="flex justify-between text-sm items-center">
@@ -658,13 +752,20 @@ function Borrow() {
                       </div>
                     </div>
                   </span>
-                  <span className="font-medium">
-                    {computeLiquidationPrice(
+
+                  <NumericFormat
+                    className="font-medium"
+                    displayType="text"
+                    value={computeLiquidationPrice(
                       collateralAmount || 0,
                       borrowAmount || 0,
                       bitUSD?.price || 0
                     )}
-                  </span>
+                    prefix={"$"}
+                    thousandSeparator=","
+                    decimalScale={2}
+                    fixedDecimalScale
+                  />
                 </div>
               </div>
 
@@ -681,11 +782,11 @@ function Borrow() {
                     <div className="space-y-2">
                       <div className="flex justify-between">
                         <span>Gas Fee (est.)</span>
-                        <span>0.0012 ETH</span>
+                        <span>$0.001</span>
                       </div>
                       <div className="flex justify-between">
                         <span>Transaction Time</span>
-                        <span>~30 seconds</span>
+                        <span>~2 seconds</span>
                       </div>
                     </div>
                   </AccordionContent>

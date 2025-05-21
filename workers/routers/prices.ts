@@ -1,6 +1,14 @@
 import { z } from "zod/v4";
 import { publicProcedure, router } from "../trpc";
 
+async function getPositions(address: string) {
+  //TODO: get positions from starknet
+
+  
+  const positions = ["test1", "test2", "test3"];
+  return positions;
+}
+
 export const priceRouter = router({
   getBitcoinPrice: publicProcedure.query(async ({ ctx }) => {
     // const response = await fetch(
@@ -19,6 +27,16 @@ export const priceRouter = router({
       price: 1.0,
     };
   }),
+  getAccountsOwnedByUser: publicProcedure
+    .input(
+      z.object({
+        address: z.string(),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const accounts = await getPositions(input.address); // get accounts with starknet address
+      return accounts;
+    }),
 });
 
 export type PriceRouter = typeof priceRouter;

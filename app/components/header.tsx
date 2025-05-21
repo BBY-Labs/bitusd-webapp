@@ -77,7 +77,7 @@ function Header() {
   const navItems = [
     // { name: "Dashboard", href: "/", icon: <HomeIcon size={16} /> },
     { name: "Borrow", href: "/", icon: <DollarIcon size={16} /> },
-    // { name: "Stake", href: "/stake", icon: <LayersIcon size={16} /> },
+    { name: "Positions", href: "/positions", icon: <LayersIcon size={16} /> },
     // { name: "Analytics", href: "/analytics", icon: <ChartIcon size={16} /> },
   ];
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);

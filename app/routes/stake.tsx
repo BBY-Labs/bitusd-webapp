@@ -127,6 +127,7 @@ function StakePage() {
                         </CardHeader>
                         <CardContent className="pt-2 space-y-6">
                             <div className="bg-slate-50 rounded-xl p-4 space-y-3 group">
+                                {/* Row 1: Label and Balance */}
                                 <div className="flex justify-between items-center">
                                     <Label
                                         htmlFor="stakeAmount"
@@ -134,17 +135,16 @@ function StakePage() {
                                     >
                                         You stake
                                     </Label>
-                                    <div className="flex items-center space-x-1">
-                                        <Button
-                                            variant="outline"
-                                            onClick={handleMaxClick}
-                                            className="h-6 px-2 text-xs rounded-md bg-white border-slate-200 hover:bg-slate-100 transition-colors font-medium"
-                                        >
-                                            Max.
-                                        </Button>
-                                    </div>
+                                    <p className="text-xs text-slate-500">
+                                        Balance:{" "}
+                                        {bitUSDBalance !== undefined
+                                            ? `${bitUSDBalance.toLocaleString()} bitUSD`
+                                            : "Loading..."}
+                                    </p>
                                 </div>
-                                <div className="flex items-start justify-between space-x-4">
+
+                                {/* Row 2: Input and Token Display */}
+                                <div className="flex justify-between items-center space-x-4">
                                     <div className="flex-grow">
                                         <NumericFormat
                                             id="stakeAmount"
@@ -153,17 +153,30 @@ function StakePage() {
                                             placeholder="0"
                                             inputMode="decimal"
                                             allowNegative={false}
-                                            decimalScale={7} // Assuming bitUSD can have decimals
+                                            decimalScale={7}
                                             value={stakeAmount}
                                             onValueChange={handleStakeAmountChange}
                                             isAllowed={(values) => {
                                                 const { floatValue } = values;
                                                 if (floatValue === undefined) return true;
-                                                // Assuming MAX_LIMIT is defined, e.g., from "~/lib/utils/calc"
                                                 return floatValue < MAX_LIMIT;
                                             }}
                                             className="text-3xl md:text-4xl font-semibold h-auto p-0 border-none bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 focus:outline-none outline-none shadow-none tracking-tight text-slate-800"
                                         />
+                                    </div>
+                                    <div className="w-auto rounded-full h-10 px-4 border border-slate-200 bg-white shadow-sm flex items-center justify-start">
+                                        <div className="bg-blue-100 p-1 rounded-full mr-2">
+                                            <span className="text-blue-600 font-bold text-xs">
+                                                $
+                                            </span>
+                                        </div>
+                                        <span className="font-medium">bitUSD</span>
+                                    </div>
+                                </div>
+
+                                {/* Row 3: Dollar Value and Max Button */}
+                                <div className="flex justify-between items-center space-x-4">
+                                    <div className="flex-grow"> {/* This div helps push the Max button to the right */}
                                         <NumericFormat
                                             className="text-sm text-slate-500 mt-1"
                                             displayType="text"
@@ -184,22 +197,13 @@ function StakePage() {
                                             ) : null
                                         )}
                                     </div>
-                                    <div className="text-right">
-                                        <div className="w-auto rounded-full h-10 px-4 border border-slate-200 bg-white shadow-sm flex items-center justify-start">
-                                            <div className="bg-blue-100 p-1 rounded-full mr-2">
-                                                <span className="text-blue-600 font-bold text-xs">
-                                                    $
-                                                </span>
-                                            </div>
-                                            <span className="font-medium">bitUSD</span>
-                                        </div>
-                                        <p className="text-xs text-slate-500 mt-1">
-                                            Balance:{" "}
-                                            {bitUSDBalance !== undefined
-                                                ? `${bitUSDBalance.toLocaleString()} bitUSD`
-                                                : "Loading..."}
-                                        </p>
-                                    </div>
+                                    <Button
+                                        variant="outline"
+                                        onClick={handleMaxClick}
+                                        className="h-6 px-2 text-xs rounded-md bg-white border-slate-200 hover:bg-slate-100 transition-colors font-medium"
+                                    >
+                                        Max.
+                                    </Button>
                                 </div>
                             </div>
 

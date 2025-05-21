@@ -172,10 +172,10 @@ function Borrow() {
       const ltv =
         currentBorrow > 0
           ? computeLTVFromBorrowAmount(
-              currentBorrow,
-              currentCollateral,
-              currentBtcPrice
-            )
+            currentBorrow,
+            currentCollateral,
+            currentBtcPrice
+          )
           : 0;
       setLtvValue(Math.round(ltv * 100)); // Display LTV as a whole number
     } else {
@@ -499,15 +499,14 @@ function Borrow() {
                     </div>
                     <div className="text-right">
                       <span
-                        className={`text-sm font-bold ${
-                          ltvValue <= 25
-                            ? "text-green-600"
-                            : ltvValue <= 50
+                        className={`text-sm font-bold ${ltvValue <= 25
+                          ? "text-green-600"
+                          : ltvValue <= 50
                             ? "text-blue-600"
                             : ltvValue <= 70
-                            ? "text-yellow-600"
-                            : "text-red-600"
-                        }`}
+                              ? "text-yellow-600"
+                              : "text-red-600"
+                          }`}
                       >
                         {ltvValue}%
                       </span>
@@ -566,13 +565,10 @@ function Borrow() {
                 <div className="grid grid-cols-1 gap-2">
                   {/* Fixed Rate Option */}
                   <div
-                    className={`relative ${
-                      selectedRate === "fixed"
-                        ? "bg-blue-50 border-2 border-blue-500"
-                        : "bg-slate-50 border-2 border-transparent hover:border-slate-200"
-                    } rounded-lg ${
-                      selectedRate === "fixed" ? "p-3" : "py-2 px-3"
-                    } cursor-pointer transition-all min-h-[60px]`}
+                    className={`relative ${selectedRate === "fixed"
+                      ? "bg-blue-50 border-2 border-blue-500"
+                      : "bg-slate-50 border-2 border-transparent hover:border-slate-200"
+                      } rounded-lg p-3 cursor-pointer transition-all min-h-[60px]`}
                     onClick={() => setSelectedRate("fixed")}
                   >
                     {selectedRate === "fixed" && (
@@ -594,24 +590,19 @@ function Borrow() {
                         Fixed (5%)
                       </h4>
                     </div>
-                    {selectedRate === "fixed" && (
-                      <p className="text-xs text-slate-600">
-                        Lock in a stable 5% interest rate for the duration of
-                        your loan. Perfect for those who prefer predictable
-                        payments.
-                      </p>
-                    )}
+                    <p className={`text-xs text-slate-600 ${selectedRate === "fixed" ? "" : "invisible"}`}>
+                      Lock in a stable 5% interest rate for the duration of
+                      your loan. Perfect for those who prefer predictable
+                      payments.
+                    </p>
                   </div>
 
                   {/* Variable Rate Option */}
                   <div
-                    className={`relative ${
-                      selectedRate === "variable"
-                        ? "bg-blue-50 border-2 border-blue-500"
-                        : "bg-slate-50 border-2 border-transparent hover:border-slate-200"
-                    } rounded-lg ${
-                      selectedRate === "variable" ? "p-3" : "py-2 px-3"
-                    } cursor-pointer transition-all min-h-[60px]`}
+                    className={`relative ${selectedRate === "variable"
+                      ? "bg-blue-50 border-2 border-blue-500"
+                      : "bg-slate-50 border-2 border-transparent hover:border-slate-200"
+                      } rounded-lg p-3 cursor-pointer transition-all min-h-[60px]`}
                     onClick={() => setSelectedRate("variable")}
                   >
                     {selectedRate === "variable" && (
@@ -626,24 +617,19 @@ function Borrow() {
                         Variable (4-6%)
                       </h4>
                     </div>
-                    {selectedRate === "variable" && (
-                      <p className="text-xs text-slate-600">
-                        Interest rate adjusts based on market conditions.
-                        Currently averaging 4.5%. May offer lower rates than
-                        fixed options.
-                      </p>
-                    )}
+                    <p className={`text-xs text-slate-600 ${selectedRate === "variable" ? "" : "invisible"}`}>
+                      Interest rate adjusts based on market conditions.
+                      Currently averaging 4.5%. May offer lower rates than
+                      fixed options.
+                    </p>
                   </div>
 
                   {/* Self Managed Option */}
                   <div
-                    className={`relative ${
-                      selectedRate === "selfManaged"
-                        ? "bg-blue-50 border-2 border-blue-500"
-                        : "bg-slate-50 border-2 border-transparent hover:border-slate-200"
-                    } rounded-lg ${
-                      selectedRate === "selfManaged" ? "p-3" : "py-2 px-3"
-                    } cursor-pointer transition-all min-h-[60px]`}
+                    className={`relative ${selectedRate === "selfManaged"
+                      ? "bg-blue-50 border-2 border-blue-500"
+                      : "bg-slate-50 border-2 border-transparent hover:border-slate-200"
+                      } rounded-lg p-3 cursor-pointer transition-all min-h-[60px]`}
                     onClick={() => setSelectedRate("selfManaged")}
                   >
                     {selectedRate === "selfManaged" && (
@@ -658,12 +644,10 @@ function Borrow() {
                         Self Managed
                       </h4>
                     </div>
-                    {selectedRate === "selfManaged" && (
-                      <p className="text-xs text-slate-600">
-                        Take control of your interest rate by actively managing
-                        your position.
-                      </p>
-                    )}
+                    <p className={`text-xs text-slate-600 ${selectedRate === "selfManaged" ? "" : "invisible"}`}>
+                      Take control of your interest rate by actively managing
+                      your position.
+                    </p>
                   </div>
                 </div>
               </div>
@@ -802,7 +786,7 @@ function Borrow() {
 
 export default Borrow;
 
-export function meta({}: Route.MetaArgs) {
+export function meta({ }: Route.MetaArgs) {
   return [
     { title: "BitUSD" },
     { name: "This is bitUSD", content: "Welcome to bitUSD!" },

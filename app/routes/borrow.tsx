@@ -1,6 +1,6 @@
 import { Button } from "~/components/ui/button";
 import { NumericFormat, type NumberFormatValues } from "react-number-format";
-import { z, ZodError } from "zod/v4";
+import { z } from "zod/v4";
 import {
   Card,
   CardContent,
@@ -40,8 +40,20 @@ import {
   MAX_LTV,
 } from "~/lib/utils/calc";
 import type { Route } from "./+types/dashboard";
-import { useAccount, useBalance } from "@starknet-react/core";
-import { TBTC_ADDRESS, TBTC_SYMBOL } from "~/lib/constants";
+import {
+  useAccount,
+  useBalance,
+  useContract,
+  useSendTransaction,
+} from "@starknet-react/core";
+import {
+  TBTC_ADDRESS,
+  TBTC_SYMBOL,
+  BORROWER_OPERATIONS_ABI,
+  BORROWER_OPERATIONS_ADDRESS,
+  TBTC_ABI,
+  BITUSD_ADDRESS,
+} from "~/lib/constants";
 
 const createBorrowFormSchema = (
   currentBitcoinPrice: number | undefined,
@@ -143,14 +155,25 @@ function Borrow() {
   const [borrowAmount, setBorrowAmount] = useState<number | undefined>(
     undefined
   );
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const trpc = useTRPC();
-  const { data: bitcoin } = useQuery(
-    trpc.priceRouter.getBitcoinPrice.queryOptions()
-  );
-  const { data: bitUSD } = useQuery(
-    trpc.priceRouter.getBitUSDPrice.queryOptions()
-  );
+  const {
+    data: bitcoin,
+    refetch: refetchBitcoin,
+    isFetching: isFetchingBitcoin,
+  } = useQuery({
+    ...trpc.priceRouter.getBitcoinPrice.queryOptions(),
+    refetchInterval: 30000, // Refetch every 30 seconds
+  });
+  const {
+    data: bitUSD,
+    refetch: refetchBitUSD,
+    isFetching: isFetchingBitUSD,
+  } = useQuery({
+    ...trpc.priceRouter.getBitUSDPrice.queryOptions(),
+    refetchInterval: 30000, // Refetch every 30 seconds
+  });
 
   const { address } = useAccount();
 
@@ -160,8 +183,19 @@ function Borrow() {
   });
 
   const { data: bitUSDBalance } = useBalance({
-    address:
-      "0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7",
+    token: BITUSD_ADDRESS,
+    address: address,
+  });
+
+  // Set up contracts
+  const { contract: tbtcContract } = useContract({
+    abi: TBTC_ABI,
+    address: TBTC_ADDRESS,
+  });
+
+  const { contract: borrowerContract } = useContract({
+    abi: BORROWER_OPERATIONS_ABI,
+    address: BORROWER_OPERATIONS_ADDRESS,
   });
 
   // Auto-updating validation based on all dependencies
@@ -237,30 +271,126 @@ function Borrow() {
     setBorrowAmount(newBorrowAmount);
   };
 
-  const handlePercentageClick = (percentage: number) => {
-    const balance = bitcoinBalance?.value
-      ? Number(bitcoinBalance.value) / 1e18
-      : 0;
-    setCollateralAmount(balance * percentage);
+  const handlePercentageClick = (
+    percentage: number,
+    type: "collateral" | "borrow"
+  ) => {
+    if (type === "collateral") {
+      const balance = bitcoinBalance?.value
+        ? Number(bitcoinBalance.value) / 1e18
+        : 0;
+      setCollateralAmount(balance * percentage);
+    } else {
+      const maxBorrowable = computeDebtLimit(
+        collateralAmount || 0,
+        bitcoin?.price || 0
+      );
+      setBorrowAmount(maxBorrowable * percentage);
+    }
   };
+
+  // Helper function to convert interest rate
+  const getAnnualInterestRate = (rateType: string): bigint => {
+    switch (rateType) {
+      case "fixed":
+        return BigInt(5 * 1e16); // 5% as 18-decimal number
+      case "variable":
+        return BigInt(4.5 * 1e16); // 4.5% as 18-decimal number
+      default:
+        return BigInt(5 * 1e16);
+    }
+  };
+
+  // Create batched transaction calls
+  const calls =
+    tbtcContract &&
+    borrowerContract &&
+    address &&
+    collateralAmount &&
+    borrowAmount
+      ? [
+          // 1. Approve TBTC spending
+          tbtcContract.populate("approve", [
+            BORROWER_OPERATIONS_ADDRESS,
+            BigInt(Math.floor(collateralAmount * 1e18)), // Approve exact collateral amount
+          ]),
+          // 2. Open trove
+          borrowerContract.populate("open_trove", [
+            address, // owner
+            0n, // owner_index (first trove)
+            BigInt(Math.floor(collateralAmount * 1e18)), // coll_amount in wei
+            BigInt(Math.floor(borrowAmount * 1e18)), // bitusd_amount in wei
+            0n, // upper_hint
+            0n, // lower_hint
+            getAnnualInterestRate(selectedRate), // annual_interest_rate
+            BigInt(1e18), // max_upfront_fee (1 token max)
+            "0x0", // add_manager (none)
+            "0x0", // remove_manager (none)
+            address, // receiver (same as owner)
+          ]),
+        ]
+      : undefined;
+
+  // Set up the transaction
+  const { send, isPending, isSuccess, error } = useSendTransaction({ calls });
 
   const getButtonText = () => {
     if (formErrors) {
-      const isCollateralTooSmallErrorPresent = formErrors.issues.some(
+      const insufficientBalanceError = formErrors.issues.find(
+        (issue) =>
+          issue.path.includes("collateralAmount") &&
+          issue.message === "Insufficient balance."
+      );
+      if (insufficientBalanceError) {
+        return "Insufficient balance";
+      }
+
+      const collateralTooHighError = formErrors.issues.find(
+        (issue) =>
+          issue.path.includes("borrowAmount") &&
+          issue.message === "Not enough collateral to borrow this amount."
+      );
+      if (collateralTooHighError) {
+        return "Not enough collateral";
+      }
+
+      const borrowTooSmallError = formErrors.issues.find(
         (issue) =>
           issue.path.includes("borrowAmount") &&
           issue.message === "Minimum borrow amount is $100."
       );
-      if (isCollateralTooSmallErrorPresent) {
-        return "Borrow amount is too small";
+      if (borrowTooSmallError) {
+        return "Minimum $100 borrow";
       }
-      // TODO: Add logic to check if collateral balance in wallet is too low
-      // if (isCollateralBalanceTooLow) {
-      //   return "Insufficient collateral balance";
-      // }
+
+      const needCollateralError = formErrors.issues.find(
+        (issue) =>
+          issue.path.includes("borrowAmount") &&
+          issue.message ===
+            "Please enter a valid collateral amount before specifying a borrow amount."
+      );
+      if (needCollateralError) {
+        return "Enter collateral first";
+      }
+
+      // Fallback for any other validation errors
+      return "Check inputs";
     }
 
     return "Borrow";
+  };
+
+  const handleBorrowClick = () => {
+    if (calls && !formErrors) {
+      send();
+    }
+  };
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await Promise.all([refetchBitcoin(), refetchBitUSD()]);
+    // Keep spinning for at least 1 second for better UX
+    setTimeout(() => setIsRefreshing(false), 1000);
   };
 
   return (
@@ -289,28 +419,32 @@ function Borrow() {
                       <Button
                         variant="outline"
                         className="h-6 px-2 text-xs rounded-md bg-white border-slate-200 hover:bg-slate-100 transition-colors"
-                        onClick={() => handlePercentageClick(0.25)}
+                        onClick={() =>
+                          handlePercentageClick(0.25, "collateral")
+                        }
                       >
                         25%
                       </Button>
                       <Button
                         variant="outline"
                         className="h-6 px-2 text-xs rounded-md bg-white border-slate-200 hover:bg-slate-100 transition-colors"
-                        onClick={() => handlePercentageClick(0.5)}
+                        onClick={() => handlePercentageClick(0.5, "collateral")}
                       >
                         50%
                       </Button>
                       <Button
                         variant="outline"
                         className="h-6 px-2 text-xs rounded-md bg-white border-slate-200 hover:bg-slate-100 transition-colors"
-                        onClick={() => handlePercentageClick(0.75)}
+                        onClick={() =>
+                          handlePercentageClick(0.75, "collateral")
+                        }
                       >
                         75%
                       </Button>
                       <Button
                         variant="outline"
                         className="h-6 px-2 text-xs rounded-md bg-white border-slate-200 hover:bg-slate-100 transition-colors font-medium"
-                        onClick={() => handlePercentageClick(1)}
+                        onClick={() => handlePercentageClick(1, "collateral")}
                       >
                         Max.
                       </Button>
@@ -400,18 +534,21 @@ function Borrow() {
                         </SelectItem> */}
                       </SelectContent>
                     </Select>
-                    <NumericFormat
-                      className="text-xs text-slate-500 mt-1"
-                      displayType="text"
-                      value={
-                        bitcoinBalance?.value && bitcoinBalance.value > 0
-                          ? `Balance: ${bitcoinBalance?.formatted} ${TBTC_SYMBOL}`
-                          : ""
-                      }
-                      thousandSeparator=","
-                      decimalScale={2}
-                      fixedDecimalScale
-                    />
+                    <div className="text-xs text-slate-500 mt-1">
+                      {bitcoinBalance?.value && bitcoinBalance.value > 0 && (
+                        <>
+                          Balance:{" "}
+                          <NumericFormat
+                            displayType="text"
+                            value={bitcoinBalance.formatted}
+                            thousandSeparator=","
+                            decimalScale={3}
+                            fixedDecimalScale
+                          />{" "}
+                          {TBTC_SYMBOL}
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -440,24 +577,28 @@ function Borrow() {
                     <Button
                       variant="outline"
                       className="h-6 px-2 text-xs rounded-md bg-white border-slate-200 hover:bg-slate-100 transition-colors"
+                      onClick={() => handlePercentageClick(0.25, "borrow")}
                     >
                       25%
                     </Button>
                     <Button
                       variant="outline"
                       className="h-6 px-2 text-xs rounded-md bg-white border-slate-200 hover:bg-slate-100 transition-colors"
+                      onClick={() => handlePercentageClick(0.5, "borrow")}
                     >
                       50%
                     </Button>
                     <Button
                       variant="outline"
                       className="h-6 px-2 text-xs rounded-md bg-white border-slate-200 hover:bg-slate-100 transition-colors"
+                      onClick={() => handlePercentageClick(0.75, "borrow")}
                     >
                       75%
                     </Button>
                     <Button
                       variant="outline"
                       className="h-6 px-2 text-xs rounded-md bg-white border-slate-200 hover:bg-slate-100 transition-colors font-medium"
+                      onClick={() => handlePercentageClick(1, "borrow")}
                     >
                       Max.
                     </Button>
@@ -587,6 +728,7 @@ function Borrow() {
                     borrowAmount <= 0
                   }
                   className="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-medium py-2 px-6 rounded-xl shadow-sm hover:shadow transition-all whitespace-nowrap"
+                  onClick={handleBorrowClick}
                 >
                   {getButtonText()}
                 </Button>
@@ -717,8 +859,17 @@ function Borrow() {
                   variant="outline"
                   size="icon"
                   className="h-7 w-7 rounded-full hover:bg-slate-100 transition-colors"
+                  onClick={handleRefresh}
+                  disabled={isRefreshing}
                 >
-                  <RefreshCw className="h-3.5 w-3.5 text-slate-600" />
+                  <RefreshCw
+                    className={`h-3.5 w-3.5 text-slate-600 ${
+                      isRefreshing ? "animate-spin" : ""
+                    }`}
+                    style={
+                      isRefreshing ? { animationDuration: "2s" } : undefined
+                    }
+                  />
                 </Button>
               </div>
             </CardHeader>

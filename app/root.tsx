@@ -8,6 +8,7 @@ import {
 } from "react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createTRPCClient, httpBatchLink } from "@trpc/client";
+import { Toaster } from "~/components/ui/sonner";
 import { TRPCProvider } from "./lib/trpc";
 import { useState } from "react";
 import type { AppRouter } from "workers/router";
@@ -90,6 +91,7 @@ export default function App() {
       <QueryClientProvider client={queryClient}>
         <TRPCProvider trpcClient={trpcClient} queryClient={queryClient}>
           <Outlet />
+          <Toaster />
         </TRPCProvider>
       </QueryClientProvider>
     </StarknetProvider>

@@ -27,7 +27,7 @@ import {
 import { RefreshCw, HelpCircle, ArrowDown, Check } from "lucide-react";
 import { Separator } from "~/components/ui/separator";
 import { Slider } from "~/components/ui/slider";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTRPC } from "~/lib/trpc";
 import {
@@ -40,10 +40,13 @@ import {
   MAX_LTV,
 } from "~/lib/utils/calc";
 import type { Route } from "./+types/dashboard";
+import { useAccount, useBalance } from "@starknet-react/core";
+import { TBTC_ADDRESS, TBTC_SYMBOL } from "~/lib/constants";
 
 const createBorrowFormSchema = (
   currentBitcoinPrice: number | undefined,
-  currentBitUSDPrice: number | undefined
+  currentBitUSDPrice: number | undefined,
+  bitcoinBalance: { value: bigint | number; formatted: string } | undefined
 ) =>
   z
     .object({
@@ -96,6 +99,7 @@ const createBorrowFormSchema = (
     )
     .refine(
       (data) => {
+        // Refinement 3: Check minimum borrow amount
         if (
           data.borrowAmount &&
           data.borrowAmount > 0 &&
@@ -113,6 +117,22 @@ const createBorrowFormSchema = (
         message: "Minimum borrow amount is $100.",
         path: ["borrowAmount"], // Error associated with the borrow amount field
       }
+    )
+    .refine(
+      (data) => {
+        // Refinement 4: Check collateral amount doesn't exceed balance
+        if (data.collateralAmount && data.collateralAmount > 0) {
+          if (!bitcoinBalance || !bitcoinBalance.value) {
+            return false; // No balance available
+          }
+          return data.collateralAmount <= Number(bitcoinBalance.value) / 1e18;
+        }
+        return true;
+      },
+      {
+        message: "Insufficient balance.",
+        path: ["collateralAmount"],
+      }
     );
 
 function Borrow() {
@@ -123,8 +143,6 @@ function Borrow() {
   const [borrowAmount, setBorrowAmount] = useState<number | undefined>(
     undefined
   );
-  const [ltvValue, setLtvValue] = useState(0);
-  const [formErrors, setFormErrors] = useState<ZodError | null>(null);
 
   const trpc = useTRPC();
   const { data: bitcoin } = useQuery(
@@ -134,6 +152,65 @@ function Borrow() {
     trpc.priceRouter.getBitUSDPrice.queryOptions()
   );
 
+  const { address } = useAccount();
+
+  const { data: bitcoinBalance } = useBalance({
+    token: TBTC_ADDRESS,
+    address: address,
+  });
+
+  const { data: bitUSDBalance } = useBalance({
+    address:
+      "0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7",
+  });
+
+  // Auto-updating validation based on all dependencies
+  const formErrors = useMemo(() => {
+    if (collateralAmount === undefined && borrowAmount === undefined) {
+      return null;
+    }
+
+    const schema = createBorrowFormSchema(
+      bitcoin?.price,
+      bitUSD?.price,
+      bitcoinBalance
+    );
+    const validationResult = schema.safeParse({
+      collateralAmount,
+      borrowAmount,
+    });
+
+    return validationResult.success ? null : validationResult.error;
+  }, [
+    collateralAmount,
+    borrowAmount,
+    bitcoin?.price,
+    bitUSD?.price,
+    bitcoinBalance,
+  ]);
+
+  // Auto-updating LTV calculation
+  const ltvValue = useMemo(() => {
+    if (
+      collateralAmount &&
+      collateralAmount > 0 &&
+      borrowAmount !== undefined &&
+      bitcoin?.price &&
+      bitcoin.price > 0
+    ) {
+      const ltv =
+        borrowAmount > 0
+          ? computeLTVFromBorrowAmount(
+              borrowAmount,
+              collateralAmount,
+              bitcoin.price
+            )
+          : 0;
+      return Math.round(ltv * 100);
+    }
+    return 0;
+  }, [collateralAmount, borrowAmount, bitcoin?.price]);
+
   // Function to determine the color based on LTV value
   const getLtvColor = () => {
     if (ltvValue <= 25) return "bg-green-500";
@@ -142,69 +219,12 @@ function Borrow() {
     return "bg-red-500";
   };
 
-  const validateAndUpdateFormState = (
-    currentCollateral: number | undefined,
-    currentBorrow: number | undefined,
-    currentBtcPrice: number | undefined,
-    currentBitUSDPrice: number | undefined
-  ) => {
-    const schema = createBorrowFormSchema(currentBtcPrice, currentBitUSDPrice);
-    const validationResult = schema.safeParse({
-      collateralAmount:
-        currentCollateral === undefined ? undefined : currentCollateral,
-      borrowAmount: currentBorrow === undefined ? undefined : currentBorrow,
-    });
-
-    if (!validationResult.success) {
-      setFormErrors(validationResult.error);
-    } else {
-      setFormErrors(null);
-    }
-
-    if (
-      currentCollateral &&
-      currentCollateral > 0 &&
-      currentBorrow !== undefined && // Allow 0 borrow amount for LTV calculation
-      currentBtcPrice &&
-      currentBtcPrice > 0
-    ) {
-      // If borrow is 0, LTV is 0. If borrow > 0, calculate it.
-      const ltv =
-        currentBorrow > 0
-          ? computeLTVFromBorrowAmount(
-            currentBorrow,
-            currentCollateral,
-            currentBtcPrice
-          )
-          : 0;
-      setLtvValue(Math.round(ltv * 100)); // Display LTV as a whole number
-    } else {
-      setLtvValue(0); // Reset LTV if inputs aren't suitable for calculation
-    }
-  };
-
   const handleCollateralChange = (values: NumberFormatValues) => {
-    const currentCollateralAmount = Number(values.value);
-    setCollateralAmount(currentCollateralAmount);
-
-    validateAndUpdateFormState(
-      currentCollateralAmount,
-      borrowAmount,
-      bitcoin?.price,
-      bitUSD?.price
-    );
+    setCollateralAmount(Number(values.value));
   };
 
   const handleBorrowAmountChange = (values: NumberFormatValues) => {
-    const currentNumericBorrowAmount = Number(values.value);
-    setBorrowAmount(currentNumericBorrowAmount);
-
-    validateAndUpdateFormState(
-      collateralAmount,
-      currentNumericBorrowAmount,
-      bitcoin?.price,
-      bitUSD?.price
-    );
+    setBorrowAmount(Number(values.value));
   };
 
   const handleLtvSliderChange = (value: number[]) => {
@@ -215,12 +235,13 @@ function Borrow() {
       bitcoin?.price || 0
     );
     setBorrowAmount(newBorrowAmount);
-    validateAndUpdateFormState(
-      collateralAmount,
-      newBorrowAmount,
-      bitcoin?.price,
-      bitUSD?.price
-    );
+  };
+
+  const handlePercentageClick = (percentage: number) => {
+    const balance = bitcoinBalance?.value
+      ? Number(bitcoinBalance.value) / 1e18
+      : 0;
+    setCollateralAmount(balance * percentage);
   };
 
   const getButtonText = () => {
@@ -263,33 +284,38 @@ function Borrow() {
                   >
                     You deposit
                   </Label>
-                  <div className="flex items-center space-x-1">
-                    {/* TODO: Add logic to use e.g. 25% of balance from wallet */}
-                    <Button
-                      variant="outline"
-                      className="h-6 px-2 text-xs rounded-md bg-white border-slate-200 hover:bg-slate-100 transition-colors"
-                    >
-                      25%
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="h-6 px-2 text-xs rounded-md bg-white border-slate-200 hover:bg-slate-100 transition-colors"
-                    >
-                      50%
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="h-6 px-2 text-xs rounded-md bg-white border-slate-200 hover:bg-slate-100 transition-colors"
-                    >
-                      75%
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="h-6 px-2 text-xs rounded-md bg-white border-slate-200 hover:bg-slate-100 transition-colors font-medium"
-                    >
-                      Max.
-                    </Button>
-                  </div>
+                  {bitcoinBalance?.value && bitcoinBalance.value > 0 && (
+                    <div className="flex items-center space-x-1">
+                      <Button
+                        variant="outline"
+                        className="h-6 px-2 text-xs rounded-md bg-white border-slate-200 hover:bg-slate-100 transition-colors"
+                        onClick={() => handlePercentageClick(0.25)}
+                      >
+                        25%
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="h-6 px-2 text-xs rounded-md bg-white border-slate-200 hover:bg-slate-100 transition-colors"
+                        onClick={() => handlePercentageClick(0.5)}
+                      >
+                        50%
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="h-6 px-2 text-xs rounded-md bg-white border-slate-200 hover:bg-slate-100 transition-colors"
+                        onClick={() => handlePercentageClick(0.75)}
+                      >
+                        75%
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="h-6 px-2 text-xs rounded-md bg-white border-slate-200 hover:bg-slate-100 transition-colors font-medium"
+                        onClick={() => handlePercentageClick(1)}
+                      >
+                        Max.
+                      </Button>
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-start justify-between space-x-4">
                   <div className="flex-grow">
@@ -345,10 +371,10 @@ function Borrow() {
                                 className="h-5 w-5 object-cover"
                               />
                             </div>
-                            <span className="font-medium">BTC</span>
+                            <span className="font-medium">{TBTC_SYMBOL}</span>
                           </div>
                         </SelectItem>
-                        <SelectItem value="wBTC">
+                        {/* <SelectItem value="wBTC">
                           <div className="flex items-center">
                             <div className="bg-blue-100 p-1 rounded-full mr-2">
                               <img
@@ -371,13 +397,21 @@ function Borrow() {
                             </div>
                             <span className="font-medium">lBTC</span>
                           </div>
-                        </SelectItem>
+                        </SelectItem> */}
                       </SelectContent>
                     </Select>
-                    {/* TODO: Fetch balance from wallet */}
-                    <p className="text-xs text-slate-500 mt-1">
-                      Balance: 0 BTC
-                    </p>
+                    <NumericFormat
+                      className="text-xs text-slate-500 mt-1"
+                      displayType="text"
+                      value={
+                        bitcoinBalance?.value && bitcoinBalance.value > 0
+                          ? `Balance: ${bitcoinBalance?.formatted} ${TBTC_SYMBOL}`
+                          : ""
+                      }
+                      thousandSeparator=","
+                      decimalScale={2}
+                      fixedDecimalScale
+                    />
                   </div>
                 </div>
               </div>
@@ -499,14 +533,15 @@ function Borrow() {
                     </div>
                     <div className="text-right">
                       <span
-                        className={`text-sm font-bold ${ltvValue <= 25
-                          ? "text-green-600"
-                          : ltvValue <= 50
+                        className={`text-sm font-bold ${
+                          ltvValue <= 25
+                            ? "text-green-600"
+                            : ltvValue <= 50
                             ? "text-blue-600"
                             : ltvValue <= 70
-                              ? "text-yellow-600"
-                              : "text-red-600"
-                          }`}
+                            ? "text-yellow-600"
+                            : "text-red-600"
+                        }`}
                       >
                         {ltvValue}%
                       </span>
@@ -565,10 +600,11 @@ function Borrow() {
                 <div className="grid grid-cols-1 gap-2">
                   {/* Fixed Rate Option */}
                   <div
-                    className={`relative ${selectedRate === "fixed"
-                      ? "bg-blue-50 border-2 border-blue-500"
-                      : "bg-slate-50 border-2 border-transparent hover:border-slate-200"
-                      } rounded-lg p-3 cursor-pointer transition-all min-h-[60px]`}
+                    className={`relative ${
+                      selectedRate === "fixed"
+                        ? "bg-blue-50 border-2 border-blue-500"
+                        : "bg-slate-50 border-2 border-transparent hover:border-slate-200"
+                    } rounded-lg p-3 cursor-pointer transition-all min-h-[60px]`}
                     onClick={() => setSelectedRate("fixed")}
                   >
                     {selectedRate === "fixed" && (
@@ -590,19 +626,23 @@ function Borrow() {
                         Fixed (5%)
                       </h4>
                     </div>
-                    <p className={`text-xs text-slate-600 ${selectedRate === "fixed" ? "" : "invisible"}`}>
-                      Lock in a stable 5% interest rate for the duration of
-                      your loan. Perfect for those who prefer predictable
-                      payments.
+                    <p
+                      className={`text-xs text-slate-600 ${
+                        selectedRate === "fixed" ? "" : "invisible"
+                      }`}
+                    >
+                      Lock in a stable 5% interest rate for the duration of your
+                      loan. Perfect for those who prefer predictable payments.
                     </p>
                   </div>
 
                   {/* Variable Rate Option */}
                   <div
-                    className={`relative ${selectedRate === "variable"
-                      ? "bg-blue-50 border-2 border-blue-500"
-                      : "bg-slate-50 border-2 border-transparent hover:border-slate-200"
-                      } rounded-lg p-3 cursor-pointer transition-all min-h-[60px]`}
+                    className={`relative ${
+                      selectedRate === "variable"
+                        ? "bg-blue-50 border-2 border-blue-500"
+                        : "bg-slate-50 border-2 border-transparent hover:border-slate-200"
+                    } rounded-lg p-3 cursor-pointer transition-all min-h-[60px]`}
                     onClick={() => setSelectedRate("variable")}
                   >
                     {selectedRate === "variable" && (
@@ -617,19 +657,24 @@ function Borrow() {
                         Variable (4-6%)
                       </h4>
                     </div>
-                    <p className={`text-xs text-slate-600 ${selectedRate === "variable" ? "" : "invisible"}`}>
+                    <p
+                      className={`text-xs text-slate-600 ${
+                        selectedRate === "variable" ? "" : "invisible"
+                      }`}
+                    >
                       Interest rate adjusts based on market conditions.
-                      Currently averaging 4.5%. May offer lower rates than
-                      fixed options.
+                      Currently averaging 4.5%. May offer lower rates than fixed
+                      options.
                     </p>
                   </div>
 
                   {/* Self Managed Option */}
                   <div
-                    className={`relative ${selectedRate === "selfManaged"
-                      ? "bg-blue-50 border-2 border-blue-500"
-                      : "bg-slate-50 border-2 border-transparent hover:border-slate-200"
-                      } rounded-lg p-3 cursor-pointer transition-all min-h-[60px]`}
+                    className={`relative ${
+                      selectedRate === "selfManaged"
+                        ? "bg-blue-50 border-2 border-blue-500"
+                        : "bg-slate-50 border-2 border-transparent hover:border-slate-200"
+                    } rounded-lg p-3 cursor-pointer transition-all min-h-[60px]`}
                     onClick={() => setSelectedRate("selfManaged")}
                   >
                     {selectedRate === "selfManaged" && (
@@ -644,7 +689,11 @@ function Borrow() {
                         Self Managed
                       </h4>
                     </div>
-                    <p className={`text-xs text-slate-600 ${selectedRate === "selfManaged" ? "" : "invisible"}`}>
+                    <p
+                      className={`text-xs text-slate-600 ${
+                        selectedRate === "selfManaged" ? "" : "invisible"
+                      }`}
+                    >
                       Take control of your interest rate by actively managing
                       your position.
                     </p>
@@ -786,7 +835,7 @@ function Borrow() {
 
 export default Borrow;
 
-export function meta({ }: Route.MetaArgs) {
+export function meta({}: Route.MetaArgs) {
   return [
     { title: "BitUSD" },
     { name: "This is bitUSD", content: "Welcome to bitUSD!" },

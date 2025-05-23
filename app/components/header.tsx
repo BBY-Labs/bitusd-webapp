@@ -19,18 +19,10 @@ import {
   Layers as LayersIcon,
 } from "lucide-react";
 import { Link, useLocation } from "react-router";
+import { GetTestBtc } from "./get-test-btc";
 
 function Logo() {
-  return (
-    <div className="flex items-center gap-2">
-      <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center text-white font-bold shadow-md">
-        B
-      </div>
-      <div className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-        BitUSD
-      </div>
-    </div>
-  );
+  return <img src="/uncap.jpg" alt="UnCap Logo" width={48} height={48} />;
 }
 
 function NavLink({
@@ -158,9 +150,8 @@ function Header() {
 
           {/* Right side: Wallet Connector */}
           <div className="flex items-center justify-end">
-            <div className="hidden md:block mr-4">
-              <Separator orientation="vertical" className="h-8 mx-4" />
-            </div>
+            <GetTestBtc />
+            <Separator orientation="vertical" className="h-8 mx-1" />
             <WalletConnector />
           </div>
         </div>

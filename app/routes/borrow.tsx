@@ -235,10 +235,10 @@ function Borrow() {
       const ltv =
         borrowAmount > 0
           ? computeLTVFromBorrowAmount(
-              borrowAmount,
-              collateralAmount,
-              bitcoin.price
-            )
+            borrowAmount,
+            collateralAmount,
+            bitcoin.price
+          )
           : 0;
       return Math.round(ltv * 100);
     }
@@ -304,31 +304,31 @@ function Borrow() {
   // Create batched transaction calls
   const calls =
     tbtcContract &&
-    borrowerContract &&
-    address &&
-    collateralAmount &&
-    borrowAmount
+      borrowerContract &&
+      address &&
+      collateralAmount &&
+      borrowAmount
       ? [
-          // 1. Approve TBTC spending
-          tbtcContract.populate("approve", [
-            BORROWER_OPERATIONS_ADDRESS,
-            BigInt(Math.floor(collateralAmount * 1e18)), // Approve exact collateral amount
-          ]),
-          // 2. Open trove
-          borrowerContract.populate("open_trove", [
-            address, // owner
-            0n, // owner_index (first trove)
-            BigInt(Math.floor(collateralAmount * 1e18)), // coll_amount in wei
-            BigInt(Math.floor(borrowAmount * 1e18)), // bitusd_amount in wei
-            0n, // upper_hint
-            0n, // lower_hint
-            getAnnualInterestRate(selectedRate), // annual_interest_rate
-            BigInt(1e18), // max_upfront_fee (1 token max)
-            "0x0", // add_manager (none)
-            "0x0", // remove_manager (none)
-            address, // receiver (same as owner)
-          ]),
-        ]
+        // 1. Approve TBTC spending
+        tbtcContract.populate("approve", [
+          BORROWER_OPERATIONS_ADDRESS,
+          BigInt(Math.floor(collateralAmount * 1e18)), // Approve exact collateral amount
+        ]),
+        // 2. Open trove
+        borrowerContract.populate("open_trove", [
+          address, // owner
+          0n, // owner_index (first trove)
+          BigInt(Math.floor(collateralAmount * 1e18)), // coll_amount in wei
+          BigInt(Math.floor(borrowAmount * 1e18)), // bitusd_amount in wei
+          0n, // upper_hint
+          0n, // lower_hint
+          getAnnualInterestRate(selectedRate), // annual_interest_rate
+          BigInt(2) ** BigInt(256) - BigInt(1), // max_upfront_fee (1 token max)
+          "0x0", // add_manager (none)
+          "0x0", // remove_manager (none)
+          address, // receiver (same as owner)
+        ]),
+      ]
       : undefined;
 
   // Set up the transaction
@@ -367,7 +367,7 @@ function Borrow() {
         (issue) =>
           issue.path.includes("borrowAmount") &&
           issue.message ===
-            "Please enter a valid collateral amount before specifying a borrow amount."
+          "Please enter a valid collateral amount before specifying a borrow amount."
       );
       if (needCollateralError) {
         return "Enter collateral first";
@@ -674,15 +674,14 @@ function Borrow() {
                     </div>
                     <div className="text-right">
                       <span
-                        className={`text-sm font-bold ${
-                          ltvValue <= 25
-                            ? "text-green-600"
-                            : ltvValue <= 50
+                        className={`text-sm font-bold ${ltvValue <= 25
+                          ? "text-green-600"
+                          : ltvValue <= 50
                             ? "text-blue-600"
                             : ltvValue <= 70
-                            ? "text-yellow-600"
-                            : "text-red-600"
-                        }`}
+                              ? "text-yellow-600"
+                              : "text-red-600"
+                          }`}
                       >
                         {ltvValue}%
                       </span>
@@ -742,11 +741,10 @@ function Borrow() {
                 <div className="grid grid-cols-1 gap-2">
                   {/* Fixed Rate Option */}
                   <div
-                    className={`relative ${
-                      selectedRate === "fixed"
-                        ? "bg-blue-50 border-2 border-blue-500"
-                        : "bg-slate-50 border-2 border-transparent hover:border-slate-200"
-                    } rounded-lg p-3 cursor-pointer transition-all min-h-[60px]`}
+                    className={`relative ${selectedRate === "fixed"
+                      ? "bg-blue-50 border-2 border-blue-500"
+                      : "bg-slate-50 border-2 border-transparent hover:border-slate-200"
+                      } rounded-lg p-3 cursor-pointer transition-all min-h-[60px]`}
                     onClick={() => setSelectedRate("fixed")}
                   >
                     {selectedRate === "fixed" && (
@@ -769,9 +767,8 @@ function Borrow() {
                       </h4>
                     </div>
                     <p
-                      className={`text-xs text-slate-600 ${
-                        selectedRate === "fixed" ? "" : "invisible"
-                      }`}
+                      className={`text-xs text-slate-600 ${selectedRate === "fixed" ? "" : "invisible"
+                        }`}
                     >
                       Lock in a stable 5% interest rate for the duration of your
                       loan. Perfect for those who prefer predictable payments.
@@ -780,11 +777,10 @@ function Borrow() {
 
                   {/* Variable Rate Option */}
                   <div
-                    className={`relative ${
-                      selectedRate === "variable"
-                        ? "bg-blue-50 border-2 border-blue-500"
-                        : "bg-slate-50 border-2 border-transparent hover:border-slate-200"
-                    } rounded-lg p-3 cursor-pointer transition-all min-h-[60px]`}
+                    className={`relative ${selectedRate === "variable"
+                      ? "bg-blue-50 border-2 border-blue-500"
+                      : "bg-slate-50 border-2 border-transparent hover:border-slate-200"
+                      } rounded-lg p-3 cursor-pointer transition-all min-h-[60px]`}
                     onClick={() => setSelectedRate("variable")}
                   >
                     {selectedRate === "variable" && (
@@ -800,9 +796,8 @@ function Borrow() {
                       </h4>
                     </div>
                     <p
-                      className={`text-xs text-slate-600 ${
-                        selectedRate === "variable" ? "" : "invisible"
-                      }`}
+                      className={`text-xs text-slate-600 ${selectedRate === "variable" ? "" : "invisible"
+                        }`}
                     >
                       Interest rate adjusts based on market conditions.
                       Currently averaging 4.5%. May offer lower rates than fixed
@@ -812,11 +807,10 @@ function Borrow() {
 
                   {/* Self Managed Option */}
                   <div
-                    className={`relative ${
-                      selectedRate === "selfManaged"
-                        ? "bg-blue-50 border-2 border-blue-500"
-                        : "bg-slate-50 border-2 border-transparent hover:border-slate-200"
-                    } rounded-lg p-3 cursor-pointer transition-all min-h-[60px]`}
+                    className={`relative ${selectedRate === "selfManaged"
+                      ? "bg-blue-50 border-2 border-blue-500"
+                      : "bg-slate-50 border-2 border-transparent hover:border-slate-200"
+                      } rounded-lg p-3 cursor-pointer transition-all min-h-[60px]`}
                     onClick={() => setSelectedRate("selfManaged")}
                   >
                     {selectedRate === "selfManaged" && (
@@ -832,9 +826,8 @@ function Borrow() {
                       </h4>
                     </div>
                     <p
-                      className={`text-xs text-slate-600 ${
-                        selectedRate === "selfManaged" ? "" : "invisible"
-                      }`}
+                      className={`text-xs text-slate-600 ${selectedRate === "selfManaged" ? "" : "invisible"
+                        }`}
                     >
                       Take control of your interest rate by actively managing
                       your position.
@@ -863,9 +856,8 @@ function Borrow() {
                   disabled={isRefreshing}
                 >
                   <RefreshCw
-                    className={`h-3.5 w-3.5 text-slate-600 ${
-                      isRefreshing ? "animate-spin" : ""
-                    }`}
+                    className={`h-3.5 w-3.5 text-slate-600 ${isRefreshing ? "animate-spin" : ""
+                      }`}
                     style={
                       isRefreshing ? { animationDuration: "2s" } : undefined
                     }
@@ -986,7 +978,7 @@ function Borrow() {
 
 export default Borrow;
 
-export function meta({}: Route.MetaArgs) {
+export function meta({ }: Route.MetaArgs) {
   return [
     { title: "BitUSD" },
     { name: "This is bitUSD", content: "Welcome to bitUSD!" },

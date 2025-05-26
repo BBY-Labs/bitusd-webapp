@@ -29,6 +29,34 @@ import { Label } from "~/components/ui/label";
 // TODO: Import calculation functions from "~/lib/utils/calc" if needed for summary
 // import { computeHealthFactor, computeLiquidationPrice, computeDebtLimit } from "~/lib/utils/calc";
 
+import { Contract } from "starknet";
+import {
+  TM_ADDRESS,
+  TROVE_MANAGER_ABI,
+  TBTC_DECIMALS,
+  TBTC_SYMBOL,
+} from "~/lib/constants";
+
+// Placeholder constants for calculations - these should ideally come from a config or Oracle
+const BTC_PRICE_USD = 40000; // Placeholder: Current price of 1 BTC in USD
+const BITUSD_DECIMALS = 18; // Placeholder: Decimals for bitUSD token
+const MCR_VALUE = 1.1; // Minimum Collateral Ratio (e.g., 110%)
+const ICR_VALUE = 1.5; // Initial Collateral Ratio for debt limit (e.g., 150% -> max LTV 1/1.5 = 66.67%)
+const INTEREST_RATE_SCALE_DOWN_FACTOR = 10n ** 16n; // Assuming rate X% is stored as X * 10^16
+
+interface RawLatestTroveData {
+  entire_debt: bigint;
+  entire_coll: bigint;
+  // redist_bit_usd_debt_gain: bigint; // Not used in current Position interface
+  // redist_coll_gain: bigint; // Not used
+  // accrued_interest: bigint; // Not used
+  // recorded_debt: bigint; // Not used
+  annual_interest_rate: bigint;
+  // weighted_recorded_debt: bigint; // Not used
+  // accrued_batch_management_fee: bigint; // Not used
+  // last_interest_rate_adj_time: bigint; // Not used
+  // Add other fields if they become available and needed
+}
 
 interface Position {
   id: string;
@@ -57,53 +85,128 @@ const getHealthFactorDisplay = (hf: number) => {
   return { text: "Poor", color: "text-red-600" };
 };
 
-function PositionsPage() {
-  const { address } = useAccount();
+const formatBigIntToNumber = (value: bigint, decimals: number): number => {
+  // Simplified conversion. For production, consider using a robust BigNumber library
+  // or string manipulation to avoid precision loss with very large u256 values.
+  if (decimals === 0) return Number(value);
+  const factor = Math.pow(10, decimals);
+  // Dividing BigInt by a number factor; convert BigInt to Number first.
+  // This can lose precision if 'value' is larger than Number.MAX_SAFE_INTEGER.
+  return Number(value.toString()) / factor;
+};
 
-  const { data: positionsData, isLoading: isLoadingPositions } = useQuery<
+const formatInterestRateForDisplay = (rawValue: bigint): number => {
+  // Assuming annual_interest_rate is stored as (Percentage * 10^16)
+  // e.g., 5.5% is 55000000000000000
+  return Number(rawValue) / Number(INTEREST_RATE_SCALE_DOWN_FACTOR);
+};
+
+function PositionsPage() {
+  const { address, account } = useAccount();
+
+  const { data: positionsData, isLoading: isLoadingPositions, isError: isErrorPositions } = useQuery<
     Position[]
   >({
-    queryKey: ["userPositions", address],
-    queryFn: () => { // Placeholder Data
-      return [
-        {
-          id: "pos1",
-          collateralAsset: "BTC",
-          collateralAmount: 2.5,
-          collateralValue: 100000,
-          borrowedAsset: "bitUSD",
-          borrowedAmount: 25000,
-          healthFactor: 2.8,
-          liquidationPrice: 15000,
-          debtLimit: 50000,
-          interestRate: 5.5,
-        },
-        {
-          id: "pos2",
-          collateralAsset: "BTC",
-          collateralAmount: 0.5,
-          collateralValue: 20000,
-          borrowedAsset: "bitUSD",
-          borrowedAmount: 8000,
-          healthFactor: 2.1,
-          liquidationPrice: 20000,
-          debtLimit: 10000,
-          interestRate: 6.1,
-        },
-        {
-          id: "pos3",
-          collateralAsset: "BTC",
-          collateralAmount: 1.0,
-          collateralValue: 40000,
-          borrowedAsset: "bitUSD",
-          borrowedAmount: 5000,
-          healthFactor: 4.0,
-          liquidationPrice: 8000,
-          debtLimit: 20000,
-          interestRate: 5.0,
-        },
-      ];
+    queryKey: ["userOnChainPositions", address],
+    queryFn: async () => {
+      console.log("queryFn started. Address:", address, "Account connected:", !!account);
+      if (!address || !account) {
+        console.log("Address or account not available, returning empty array.");
+        return [];
+      }
+
+      const troveManagerContract = new Contract(
+        TROVE_MANAGER_ABI,
+        TM_ADDRESS,
+        account // Use account directly as the provider
+      );
+
+      try {
+        console.log("Fetching owner positions for address:", address);
+        // 1. Get all trove IDs for the owner
+        // The ABI for get_owner_to_positions indicates it returns Array<core::integer::u256>
+        // StarkNet.js typically deserializes this to bigint[]
+        const ownerPositionsResult = (await troveManagerContract.get_owner_to_positions(
+          address
+        )) as bigint[];
+        console.log("ownerPositionsResult:", ownerPositionsResult);
+
+        if (!ownerPositionsResult || ownerPositionsResult.length === 0) {
+          console.log("No trove IDs found for owner or result is empty.");
+          return [];
+        }
+        const troveIds: bigint[] = Array.isArray(ownerPositionsResult) ? ownerPositionsResult : [];
+        console.log("Parsed troveIds:", troveIds);
+
+        if (troveIds.length === 0) {
+          console.log("troveIds array is empty after parsing.");
+          return [];
+        }
+
+        // 2. For each trove ID, get its latest data
+        console.log(`Fetching latest trove data for ${troveIds.length} trove(s).`);
+        const positionPromises = troveIds.map(async (troveId) => {
+          console.log("Fetching data for troveId:", troveId.toString());
+          // The ABI for get_latest_trove_data indicates it returns LatestTroveData struct
+          // StarkNet.js typically deserializes this to an object with bigint fields
+          const latestTroveData = (await troveManagerContract.get_latest_trove_data(
+            troveId
+          )) as RawLatestTroveData; // Assuming the structure provided
+          console.log("latestTroveData for troveId", troveId.toString(), ":", latestTroveData);
+
+          if (!latestTroveData || typeof latestTroveData.entire_coll === 'undefined' || typeof latestTroveData.entire_debt === 'undefined') {
+            console.warn("Incomplete or undefined latestTroveData for troveId:", troveId.toString(), latestTroveData);
+            return null; // Return null if data is incomplete, will be filtered out
+          }
+
+          const collateralAmount = formatBigIntToNumber(latestTroveData.entire_coll, TBTC_DECIMALS);
+          const borrowedAmount = formatBigIntToNumber(latestTroveData.entire_debt, BITUSD_DECIMALS);
+          const collateralValue = collateralAmount * BTC_PRICE_USD;
+
+          let healthFactor = Infinity;
+          if (borrowedAmount > 0) {
+            healthFactor = (collateralValue / borrowedAmount) / MCR_VALUE;
+          }
+
+          let liquidationPrice = 0;
+          if (collateralAmount > 0) {
+            liquidationPrice = (borrowedAmount * MCR_VALUE) / collateralAmount;
+          }
+
+          const debtLimit = collateralValue / ICR_VALUE;
+          const interestRate = formatInterestRateForDisplay(latestTroveData.annual_interest_rate);
+
+          const position = {
+            id: troveId.toString(),
+            collateralAsset: TBTC_SYMBOL,
+            collateralAmount,
+            collateralValue,
+            borrowedAsset: "bitUSD", // Assuming borrowed asset is always bitUSD
+            borrowedAmount,
+            healthFactor,
+            liquidationPrice,
+            debtLimit,
+            interestRate,
+          };
+          console.log("Processed position for troveId", troveId.toString(), ":", position);
+          return position;
+        });
+
+        const resolvedPositions = await Promise.all(positionPromises);
+        console.log("Resolved positions (before filter):", resolvedPositions);
+
+        const filteredPositions = resolvedPositions.filter(p => p !== null) as Position[];
+        console.log("Filtered positions (after filter):", filteredPositions);
+        return filteredPositions;
+
+      } catch (error) {
+        console.error("Error fetching user positions inside queryFn:", error);
+        // Consider re-throwing or returning an empty array to let react-query handle error state
+        throw error; // Or return [] and rely on isErrorPositions
+      }
     },
+    enabled: !!address && !!account, // Only run query if address and account are available
+    // Placeholder data removed
   });
 
   const [sortConfig, setSortConfig] = useState<SortConfig | null>(null);
@@ -217,8 +320,9 @@ function PositionsPage() {
       <Separator className="mb-6 bg-slate-200" />
 
       {isLoadingPositions && <p className="text-center text-slate-600 py-10">Loading positions...</p>}
+      {isErrorPositions && <p className="text-center text-red-600 py-10">Error loading positions. Please try again later.</p>}
 
-      {!isLoadingPositions && (!sortedPositions || sortedPositions.length === 0) && (
+      {!isLoadingPositions && !isErrorPositions && (!sortedPositions || sortedPositions.length === 0) && (
         <Card className="border border-slate-200 shadow-sm mt-6">
           <CardContent className="pt-6">
             <p className="text-center text-slate-600">You have no open positions.</p>
@@ -226,7 +330,7 @@ function PositionsPage() {
         </Card>
       )}
 
-      {!isLoadingPositions && sortedPositions && sortedPositions.length > 0 && (
+      {!isLoadingPositions && !isErrorPositions && sortedPositions && sortedPositions.length > 0 && (
         <>
           <div className="overflow-x-auto shadow border-b border-slate-200 sm:rounded-lg">
             <table className="min-w-full divide-y divide-slate-200">

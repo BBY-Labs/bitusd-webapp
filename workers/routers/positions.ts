@@ -88,7 +88,7 @@ export const positionsRouter = router({
         }
 
         // Process positions in batches to avoid rate limiting
-        const batchSize = 5; // Adjust based on your RPC limits
+        const batchSize = 1;
         const resolvedPositions: (Position | null)[] = [];
 
         for (let i = 0; i < troveIds.length; i += batchSize) {

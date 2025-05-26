@@ -3,8 +3,9 @@ import { getBitcoinprice } from "workers/services/utils";
 
 export const priceRouter = router({
   getBitcoinPrice: publicProcedure.query(async ({ ctx }) => {
+    const price = await getBitcoinprice();
     return {
-      price: await getBitcoinprice(),
+      price: Number(price) / 1e18,
     };
   }),
   getBitUSDPrice: publicProcedure.query(({ ctx }) => {

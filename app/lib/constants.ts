@@ -8,7 +8,8 @@ export const TBTC_ADDRESS =
 export const BITUSD_ADDRESS =
   "0x6feeca6bdb67f098e4c728b3c942d4b714b13a3a6ff3e7ebc902c25a408d13b";
 
-export const PRICE_FEED_BTC = "0x4db7a80e186f604fa30e173448d41047e2753be00918c932e689565930a18b6";
+export const PRICE_FEED_BTC =
+  "0x4db7a80e186f604fa30e173448d41047e2753be00918c932e689565930a18b6";
 
 export const TBTC_DECIMALS = 18;
 
@@ -16,8 +17,47 @@ export const TBTC_SYMBOL = "TBTC";
 
 export const TBTC_NAME = "Testnet Bitcoin";
 
-export const PRICE_FEED_ABI =
-  [{ "type": "impl", "name": "IPriceFeedMockImpl", "interface_name": "bit_usd::mocks::PriceFeedMock::IPriceFeedMock" }, { "type": "struct", "name": "core::integer::u256", "members": [{ "name": "low", "type": "core::integer::u128" }, { "name": "high", "type": "core::integer::u128" }] }, { "type": "interface", "name": "bit_usd::mocks::PriceFeedMock::IPriceFeedMock", "items": [{ "type": "function", "name": "fetch_price", "inputs": [], "outputs": [{ "type": "core::integer::u256" }], "state_mutability": "view" }, { "type": "function", "name": "fetch_redemption_price", "inputs": [], "outputs": [{ "type": "core::integer::u256" }], "state_mutability": "view" }] }, { "type": "event", "name": "bit_usd::mocks::PriceFeedMock::PriceFeedMock::Event", "kind": "enum", "variants": [] }];
+export const PRICE_FEED_ABI = [
+  {
+    type: "impl",
+    name: "IPriceFeedMockImpl",
+    interface_name: "bit_usd::mocks::PriceFeedMock::IPriceFeedMock",
+  },
+  {
+    type: "struct",
+    name: "core::integer::u256",
+    members: [
+      { name: "low", type: "core::integer::u128" },
+      { name: "high", type: "core::integer::u128" },
+    ],
+  },
+  {
+    type: "interface",
+    name: "bit_usd::mocks::PriceFeedMock::IPriceFeedMock",
+    items: [
+      {
+        type: "function",
+        name: "fetch_price",
+        inputs: [],
+        outputs: [{ type: "core::integer::u256" }],
+        state_mutability: "view",
+      },
+      {
+        type: "function",
+        name: "fetch_redemption_price",
+        inputs: [],
+        outputs: [{ type: "core::integer::u256" }],
+        state_mutability: "view",
+      },
+    ],
+  },
+  {
+    type: "event",
+    name: "bit_usd::mocks::PriceFeedMock::PriceFeedMock::Event",
+    kind: "enum",
+    variants: [],
+  },
+];
 
 export const TBTC_ABI = [
   {

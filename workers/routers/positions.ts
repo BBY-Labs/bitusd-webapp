@@ -97,7 +97,9 @@ export const positionsRouter = router({
             BITUSD_DECIMALS
           );
           const bitcoinPrice = await getBitcoinprice();
-          const collateralValue = collateralAmount * bitcoinPrice;
+
+          const collateralValue =
+            collateralAmount * (Number(bitcoinPrice) / 1e18);
 
           let healthFactor = Infinity;
           if (borrowedAmount > 0) {

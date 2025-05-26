@@ -50,7 +50,7 @@ import {
   getAnnualInterestRate,
 } from "~/lib/utils/calc";
 import type { Route } from "./+types/dashboard";
-import { useAccount, useBalance, useContract } from "@starknet-react/core";
+import { useAccount, useBalance } from "@starknet-react/core";
 import {
   INTEREST_RATE_SCALE_DOWN_FACTOR,
   TBTC_ADDRESS,
@@ -125,14 +125,14 @@ const createBorrowFormSchema = (
           currentBitUSDPrice > 0
         ) {
           const borrowValue = data.borrowAmount * currentBitUSDPrice;
-          if (borrowValue < 100) {
+          if (borrowValue < 2000) {
             return false; // Invalid if borrow value is less than $100
           }
         }
         return true;
       },
       {
-        message: "Minimum borrow amount is $100.",
+        message: "Minimum borrow amount is $2000.",
         path: ["borrowAmount"], // Error associated with the borrow amount field
       }
     )
@@ -164,7 +164,7 @@ function Borrow() {
   );
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showSuccessScreen, setShowSuccessScreen] = useState(false);
-  const [showLoadingScreen, setShowLoadingScreen] = useState(false);
+  const [transactionSubmitted, setTransactionSubmitted] = useState(false);
 
   const trpc = useTRPC();
   const { data: bitcoin, refetch: refetchBitcoin } = useQuery({
@@ -209,6 +209,11 @@ function Borrow() {
     borrowAmount,
     annualInterestRate,
   });
+
+  // Track when transaction is submitted
+  if (isPending && !transactionSubmitted) {
+    setTransactionSubmitted(true);
+  }
 
   // Auto-updating validation based on all dependencies
   const formErrors = useMemo(() => {
@@ -300,7 +305,7 @@ function Borrow() {
     }
   };
 
-  // Check for transaction success and show success screen
+  // Handle success
   if (isTransactionSuccess && data?.transaction_hash && !showSuccessScreen) {
     toast.success("Transaction Successful! 🎉", {
       description: `Successfully borrowed ${borrowAmount?.toLocaleString()} bitUSD`,
@@ -314,44 +319,64 @@ function Borrow() {
       },
     });
 
-    // Store transaction details and show success screen
     setTransactionDetails({
       collateralAmount: collateralAmount || 0,
       borrowAmount: borrowAmount || 0,
       transactionHash: data.transaction_hash,
     });
     setShowSuccessScreen(true);
-    setShowLoadingScreen(false);
+    setTransactionSubmitted(false); // Reset for next transaction
   }
 
-  // Check for transaction error
+  // Handle error (including user rejection)
   if (isTransactionError && transactionError && !showSuccessScreen) {
-    toast.error("Transaction Failed", {
-      description:
-        transactionError.message || "The transaction failed. Please try again.",
-    });
-    setShowLoadingScreen(false);
+    const errorMessage =
+      transactionError.message || "The transaction failed. Please try again.";
+    const isUserRejection =
+      errorMessage.toLowerCase().includes("reject") ||
+      errorMessage.toLowerCase().includes("cancel") ||
+      errorMessage.toLowerCase().includes("denied") ||
+      errorMessage.toLowerCase().includes("user abort");
+
+    if (isUserRejection) {
+      toast.info("Transaction Cancelled", {
+        description: "You cancelled the transaction.",
+      });
+    } else {
+      toast.error("Transaction Failed", {
+        description: errorMessage,
+      });
+    }
+
+    setTransactionSubmitted(false); // Reset on error
   }
 
   const handleBorrowClick = () => {
     if (isReady && !formErrors) {
       send();
-      setShowLoadingScreen(true);
     }
   };
 
   const handleNewBorrow = () => {
     setShowSuccessScreen(false);
-    setShowLoadingScreen(false);
+    setTransactionSubmitted(false);
     setCollateralAmount(undefined);
     setBorrowAmount(undefined);
+    setSelectedRate("fixed");
+    setSelfManagedRate(5);
     setTransactionDetails(null);
   };
 
+  // Show loading only when transaction is pending (after wallet approval)
+  // If user rejects, isPending becomes false and isTransactionError becomes true
+  const shouldShowLoading =
+    transactionSubmitted && !showSuccessScreen && !isTransactionError;
+  const shouldShowSuccess = showSuccessScreen && transactionDetails;
+
   // Loading/Success Screen Component
   const TransactionStatusContent = () => {
-    if (showLoadingScreen && !showSuccessScreen) {
-      // Loading state
+    if (shouldShowLoading) {
+      // Loading state - transaction is approved and pending
       return (
         <Card className="border border-slate-200 shadow-sm hover:shadow-md transition-shadow duration-300 overflow-hidden">
           <CardContent className="pt-6 space-y-6">
@@ -362,8 +387,13 @@ function Borrow() {
                   Processing Transaction
                 </h3>
                 <p className="text-sm text-slate-600">
-                  Creating your borrow position...
+                  Your transaction is being confirmed on the blockchain...
                 </p>
+                {data?.transaction_hash && (
+                  <p className="text-xs text-slate-500">
+                    Transaction Hash: {data.transaction_hash.slice(0, 10)}...
+                  </p>
+                )}
               </div>
             </div>
           </CardContent>
@@ -371,8 +401,8 @@ function Borrow() {
       );
     }
 
-    if (showSuccessScreen && transactionDetails) {
-      // Success state
+    if (shouldShowSuccess) {
+      // Success state - same as before
       return (
         <Card className="border border-slate-200 shadow-sm hover:shadow-md transition-shadow duration-300 overflow-hidden">
           <CardContent className="pt-6 space-y-6">
@@ -426,7 +456,7 @@ function Borrow() {
                     Interest Rate (APR)
                   </span>
                   <span className="font-semibold text-slate-800">
-                    {(Number(annualInterestRate) / 1e18).toFixed(1)}%
+                    {annualInterestRate / INTEREST_RATE_SCALE_DOWN_FACTOR}%
                   </span>
                 </div>
               </div>
@@ -456,7 +486,6 @@ function Borrow() {
       );
     }
 
-    // Return null if neither loading nor success
     return null;
   };
 
@@ -471,7 +500,7 @@ function Borrow() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         {/* Left Panel */}
         <div className="md:col-span-2">
-          {showLoadingScreen || showSuccessScreen ? (
+          {shouldShowLoading || shouldShowSuccess ? (
             <TransactionStatusContent />
           ) : (
             <Card className="border border-slate-200 shadow-sm hover:shadow-md transition-shadow duration-300 overflow-hidden">
@@ -719,9 +748,11 @@ function Borrow() {
                     <div className="text-right">
                       <div className="w-auto rounded-full h-10 px-4 border border-slate-200 bg-white shadow-sm flex items-center justify-start">
                         <div className="bg-blue-100 p-1 rounded-full mr-2">
-                          <span className="text-blue-600 font-bold text-xs">
-                            $
-                          </span>
+                          <img
+                            src="/bitusd.png"
+                            alt="BTC"
+                            className="h-5 w-5 object-cover"
+                          />
                         </div>
                         <span className="font-medium">bitUSD</span>
                       </div>
@@ -800,12 +831,13 @@ function Borrow() {
                       !!formErrors ||
                       !collateralAmount ||
                       !borrowAmount ||
-                      borrowAmount <= 0
+                      borrowAmount <= 0 ||
+                      isPending // Disable while transaction is pending
                     }
                     className="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-medium py-2 px-6 rounded-xl shadow-sm hover:shadow transition-all whitespace-nowrap"
                     onClick={handleBorrowClick}
                   >
-                    {buttonText}
+                    {isPending ? "Confirming..." : buttonText}
                   </Button>
                 </div>
 

@@ -1,5 +1,7 @@
 import type { Abi } from "starknet";
 
+export const INTEREST_RATE_SCALE_DOWN_FACTOR = 10n ** 16n;
+
 export const TBTC_ADDRESS =
   "0x25e09b7c20159bcbbc483f45f356f3fc792052a1ebc0fa0a2563259499d964a";
 
@@ -46,7 +48,6 @@ export const TBTC_ABI = [
     outputs: [],
   },
 ] as const satisfies Abi;
-
 
 export const TROVE_MANAGER_ABI = [
   {
@@ -129,15 +130,24 @@ export const TROVE_MANAGER_ABI = [
     name: "bit_usd::TroveManager::LatestBatchData",
     members: [
       { name: "total_debt_shares", type: "core::integer::u256" },
-      { name: "entire_debt_without_redistribution", type: "core::integer::u256" },
-      { name: "entire_coll_without_redistribution", type: "core::integer::u256" },
+      {
+        name: "entire_debt_without_redistribution",
+        type: "core::integer::u256",
+      },
+      {
+        name: "entire_coll_without_redistribution",
+        type: "core::integer::u256",
+      },
       { name: "accrued_interest", type: "core::integer::u256" },
       { name: "recorded_debt", type: "core::integer::u256" },
       { name: "annual_interest_rate", type: "core::integer::u256" },
       { name: "weighted_recorded_debt", type: "core::integer::u256" },
       { name: "annual_management_fee", type: "core::integer::u256" },
       { name: "accrued_management_fee", type: "core::integer::u256" },
-      { name: "weighted_recorded_batch_management_fee", type: "core::integer::u256" },
+      {
+        name: "weighted_recorded_batch_management_fee",
+        type: "core::integer::u256",
+      },
       { name: "last_debt_update_time", type: "core::integer::u256" },
       { name: "last_interest_rate_adj_time", type: "core::integer::u256" },
     ],
@@ -163,8 +173,14 @@ export const TROVE_MANAGER_ABI = [
       { name: "old_weighted_recorded_debt", type: "core::integer::u256" },
       { name: "upfront_fee", type: "core::integer::u256" },
       { name: "batch_accrued_management_fee", type: "core::integer::u256" },
-      { name: "new_weighted_recorded_batch_management_fee", type: "core::integer::u256" },
-      { name: "old_weighted_recorded_batch_management_fee", type: "core::integer::u256" },
+      {
+        name: "new_weighted_recorded_batch_management_fee",
+        type: "core::integer::u256",
+      },
+      {
+        name: "old_weighted_recorded_batch_management_fee",
+        type: "core::integer::u256",
+      },
     ],
   },
   {
@@ -337,7 +353,10 @@ export const TROVE_MANAGER_ABI = [
             name: "price_feed",
             type: "core::starknet::contract_address::ContractAddress",
           },
-          { name: "eth", type: "core::starknet::contract_address::ContractAddress" },
+          {
+            name: "eth",
+            type: "core::starknet::contract_address::ContractAddress",
+          },
           {
             name: "borrower_operations",
             type: "core::starknet::contract_address::ContractAddress",
@@ -362,7 +381,10 @@ export const TROVE_MANAGER_ABI = [
             name: "collateral_registry",
             type: "core::starknet::contract_address::ContractAddress",
           },
-          { name: "bitusd", type: "core::starknet::contract_address::ContractAddress" },
+          {
+            name: "bitusd",
+            type: "core::starknet::contract_address::ContractAddress",
+          },
           {
             name: "stability_pool",
             type: "core::starknet::contract_address::ContractAddress",
@@ -415,7 +437,10 @@ export const TROVE_MANAGER_ABI = [
         type: "function",
         name: "batch_liquidate_troves",
         inputs: [
-          { name: "trove_array", type: "core::array::Span::<core::integer::u256>" },
+          {
+            name: "trove_array",
+            type: "core::array::Span::<core::integer::u256>",
+          },
         ],
         outputs: [],
         state_mutability: "external",
@@ -471,7 +496,10 @@ export const TROVE_MANAGER_ABI = [
         name: "urgent_redemption",
         inputs: [
           { name: "bit_usd_amount", type: "core::integer::u256" },
-          { name: "trove_ids", type: "core::array::Span::<core::integer::u256>" },
+          {
+            name: "trove_ids",
+            type: "core::array::Span::<core::integer::u256>",
+          },
           { name: "min_collateral", type: "core::integer::u256" },
         ],
         outputs: [],
@@ -610,7 +638,13 @@ export const TROVE_MANAGER_ABI = [
         outputs: [],
         state_mutability: "external",
       },
-      { type: "function", name: "shutdown", inputs: [], outputs: [], state_mutability: "external" },
+      {
+        type: "function",
+        name: "shutdown",
+        inputs: [],
+        outputs: [],
+        state_mutability: "external",
+      },
       {
         type: "function",
         name: "on_set_batch_manager_annual_interest_rate",
@@ -736,7 +770,6 @@ export const TROVE_MANAGER_ABI = [
   },
 ] as const satisfies Abi;
 
-
 export const BORROWER_OPERATIONS_ADDRESS =
   "0x7362108a497aac0328a1df2b2699cb07df805bb05a180b69c6431e8c0443c03";
 export const AP_ADDRESS =
@@ -749,8 +782,10 @@ export const SORTED_TROVES_ADDRESS =
   "0xcd88dffb139c619452b078a2f6aba87541e5cec08fa0f63b0ab2dd17cda10b";
 export const TM_ADDRESS =
   "0x119b8feaa5585d99023185a1ea42086bc125ee4c6dfa6ef6a4e29befc977476";
-export const TROVE_NFT_ADDRESS = "0x7739f3ecb72a64783a48ccc300b7b936a217b53871dd7b0efa9c14e1b23854b";
-export const STABILITY_POOL_ADDRESS = "0x724b2bcb7d267d9745388fa11a044049da489c9dea902533114768ea930d1dc";
+export const TROVE_NFT_ADDRESS =
+  "0x7739f3ecb72a64783a48ccc300b7b936a217b53871dd7b0efa9c14e1b23854b";
+export const STABILITY_POOL_ADDRESS =
+  "0x724b2bcb7d267d9745388fa11a044049da489c9dea902533114768ea930d1dc";
 
 export const BORROWER_OPERATIONS_ABI = [
   {

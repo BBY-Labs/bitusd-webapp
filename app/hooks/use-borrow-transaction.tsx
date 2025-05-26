@@ -22,13 +22,18 @@ interface UseBorrowTransactionParams {
   annualInterestRate: bigint;
 }
 
+interface UseBorrowTransactionResult extends UseSendTransactionResult {
+  isReady: boolean;
+  isTransactionSuccess: boolean;
+  isTransactionError: boolean;
+  transactionError: Error | null;
+}
+
 export function useBorrowTransaction({
   collateralAmount,
   borrowAmount,
   annualInterestRate,
-}: UseBorrowTransactionParams): UseSendTransactionResult & {
-  isReady: boolean;
-} {
+}: UseBorrowTransactionParams): UseBorrowTransactionResult {
   const queryClient = useQueryClient();
   const { address, chainId } = useAccount();
   const { ownerIndex, isLoadingOwnerPositions } = useOwnerPositions();
@@ -92,14 +97,24 @@ export function useBorrowTransaction({
   const transaction = useSendTransaction({ calls });
 
   // Wait for transaction to be confirmed on blockchain
-  const { data: receipt, isSuccess: isReceiptSuccess } = useTransactionReceipt({
+  const {
+    data: receipt,
+    isSuccess: isReceiptSuccess,
+    isError: isReceiptError,
+    error: receiptError,
+  } = useTransactionReceipt({
     hash: transaction.data?.transaction_hash,
     watch: true,
   });
 
+  // Determine transaction success/error states
+  const isTransactionSuccess = isReceiptSuccess && !!receipt;
+  const isTransactionError = transaction.isError || isReceiptError;
+  const transactionError = transaction.error || receiptError || null;
+
   // Invalidate once when receipt is successful
   if (
-    isReceiptSuccess &&
+    isTransactionSuccess &&
     receipt &&
     transaction.data?.transaction_hash &&
     invalidatedRef.current !== transaction.data.transaction_hash &&
@@ -126,5 +141,8 @@ export function useBorrowTransaction({
   return {
     ...transaction,
     isReady: !!calls,
+    isTransactionSuccess,
+    isTransactionError,
+    transactionError,
   };
 }

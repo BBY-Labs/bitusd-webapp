@@ -13,43 +13,11 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  // DialogTrigger, // We'll control opening manually
 } from "~/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
-// TODO: Import calculation functions from "~/lib/utils/calc" if needed for summary
-// import { computeHealthFactor, computeLiquidationPrice, computeDebtLimit } from "~/lib/utils/calc";
-
-import { Contract } from "starknet";
-import {
-  TM_ADDRESS,
-  TROVE_MANAGER_ABI,
-  TBTC_DECIMALS,
-  TBTC_SYMBOL,
-} from "~/lib/constants";
 import { useTRPC } from "~/lib/trpc";
-
-// Placeholder constants for calculations - these should ideally come from a config or Oracle
-const BTC_PRICE_USD = 40000; // Placeholder: Current price of 1 BTC in USD
-const BITUSD_DECIMALS = 18; // Placeholder: Decimals for bitUSD token
-const MCR_VALUE = 1.1; // Minimum Collateral Ratio (e.g., 110%)
-const ICR_VALUE = 1.5; // Initial Collateral Ratio for debt limit (e.g., 150% -> max LTV 1/1.5 = 66.67%)
-const INTEREST_RATE_SCALE_DOWN_FACTOR = 10n ** 16n; // Assuming rate X% is stored as X * 10^16
-
-interface RawLatestTroveData {
-  entire_debt: bigint;
-  entire_coll: bigint;
-  // redist_bit_usd_debt_gain: bigint; // Not used in current Position interface
-  // redist_coll_gain: bigint; // Not used
-  // accrued_interest: bigint; // Not used
-  // recorded_debt: bigint; // Not used
-  annual_interest_rate: bigint;
-  // weighted_recorded_debt: bigint; // Not used
-  // accrued_batch_management_fee: bigint; // Not used
-  // last_interest_rate_adj_time: bigint; // Not used
-  // Add other fields if they become available and needed
-}
 
 interface Position {
   id: string;
@@ -83,22 +51,6 @@ const getHealthFactorDisplay = (hf: number) => {
   return { text: "Poor", color: "text-red-600" };
 };
 
-const formatBigIntToNumber = (value: bigint, decimals: number): number => {
-  // Simplified conversion. For production, consider using a robust BigNumber library
-  // or string manipulation to avoid precision loss with very large u256 values.
-  if (decimals === 0) return Number(value);
-  const factor = Math.pow(10, decimals);
-  // Dividing BigInt by a number factor; convert BigInt to Number first.
-  // This can lose precision if 'value' is larger than Number.MAX_SAFE_INTEGER.
-  return Number(value.toString()) / factor;
-};
-
-const formatInterestRateForDisplay = (rawValue: bigint): number => {
-  // Assuming annual_interest_rate is stored as (Percentage * 10^16)
-  // e.g., 5.5% is 55000000000000000
-  return Number(rawValue) / Number(INTEREST_RATE_SCALE_DOWN_FACTOR);
-};
-
 function PositionsPage() {
   const [sortConfig, setSortConfig] = useState<SortConfig | null>(null);
   const [selectedPosition, setSelectedPosition] = useState<Position | null>(
@@ -119,12 +71,6 @@ function PositionsPage() {
       userAddress: address as `0x${string}`,
     })
   );
-
-  // TODO: Add state for 'borrow more' amount if implementing that part fully
-  // const positionsToDisplay = useMemo(
-  //   () => positionsData?.positions || [],
-  //   [positionsData]
-  // );
 
   const sortedPositions = useMemo(() => {
     let sortableItems = [...(positionsData?.positions || [])];

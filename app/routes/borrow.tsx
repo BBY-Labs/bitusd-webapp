@@ -23,7 +23,17 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "~/components/ui/accordion";
-import { RefreshCw, HelpCircle, ArrowDown, Check } from "lucide-react";
+import {
+  RefreshCw,
+  HelpCircle,
+  ArrowDown,
+  Check,
+  CheckCircle2,
+  XCircle,
+  Loader2,
+  ExternalLink,
+  ArrowLeft,
+} from "lucide-react";
 import { Separator } from "~/components/ui/separator";
 import { Slider } from "~/components/ui/slider";
 import { useState, useMemo } from "react";
@@ -41,10 +51,15 @@ import {
 } from "~/lib/utils/calc";
 import type { Route } from "./+types/dashboard";
 import { useAccount, useBalance, useContract } from "@starknet-react/core";
-import { TBTC_ADDRESS, TBTC_SYMBOL } from "~/lib/constants";
+import {
+  INTEREST_RATE_SCALE_DOWN_FACTOR,
+  TBTC_ADDRESS,
+  TBTC_SYMBOL,
+} from "~/lib/constants";
 import { useBorrowTransaction } from "~/hooks/use-borrow-transaction";
 import { getLtvColor } from "~/lib/utils";
 import { getBorrowButtonText } from "~/lib/utils/form";
+import { toast } from "sonner";
 
 const createBorrowFormSchema = (
   currentBitcoinPrice: number | undefined,
@@ -148,6 +163,7 @@ function Borrow() {
     undefined
   );
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [showSuccessScreen, setShowSuccessScreen] = useState(false);
 
   const trpc = useTRPC();
   const { data: bitcoin, refetch: refetchBitcoin } = useQuery({
@@ -164,13 +180,30 @@ function Borrow() {
     address: address,
   });
 
+  // Store transaction details for success screen
+  const [transactionDetails, setTransactionDetails] = useState<{
+    collateralAmount: number;
+    borrowAmount: number;
+    transactionHash: string;
+  } | null>(null);
+
   // Calculate annual interest rate
   const annualInterestRate = useMemo(() => {
     return getAnnualInterestRate(selectedRate, selfManagedRate);
   }, [selectedRate, selfManagedRate]);
 
-  // Replace the existing useSendTransaction with the new hook
-  const { send, isPending, isSuccess, error, isReady } = useBorrowTransaction({
+  // Replace the existing useBorrowTransaction with the new hook
+  const {
+    send,
+    isPending,
+    isSuccess,
+    error,
+    isReady,
+    isTransactionSuccess,
+    isTransactionError,
+    transactionError,
+    data,
+  } = useBorrowTransaction({
     collateralAmount,
     borrowAmount,
     annualInterestRate,
@@ -266,19 +299,146 @@ function Borrow() {
     }
   };
 
+  // Check for transaction success and show success screen
+  if (isTransactionSuccess && data?.transaction_hash && !showSuccessScreen) {
+    toast.success("Transaction Successful! 🎉", {
+      description: `Successfully borrowed ${borrowAmount?.toLocaleString()} bitUSD`,
+      action: {
+        label: "View",
+        onClick: () =>
+          window.open(
+            `https://voyager.online/tx/${data.transaction_hash}`,
+            "_blank"
+          ),
+      },
+    });
+
+    // Store transaction details and show success screen
+    setTransactionDetails({
+      collateralAmount: collateralAmount || 0,
+      borrowAmount: borrowAmount || 0,
+      transactionHash: data.transaction_hash,
+    });
+    setShowSuccessScreen(true);
+  }
+
+  // Check for transaction error
+  if (isTransactionError && transactionError && !showSuccessScreen) {
+    toast.error("Transaction Failed", {
+      description:
+        transactionError.message || "The transaction failed. Please try again.",
+    });
+  }
+
   const handleBorrowClick = () => {
     if (isReady && !formErrors) {
       send();
+
+      // Show pending toast when transaction is submitted
+      // toast.loading("Transaction Submitted", {
+      //   description: "Your borrow transaction is being processed...",
+      // });
     }
   };
 
-  const handleRefresh = async () => {
-    setIsRefreshing(true);
-    await Promise.all([refetchBitcoin(), refetchBitUSD()]);
-    // Keep spinning for at least 1 second for better UX
-    setTimeout(() => setIsRefreshing(false), 1000);
+  const handleNewBorrow = () => {
+    setShowSuccessScreen(false);
+    setCollateralAmount(undefined);
+    setBorrowAmount(undefined);
+    setTransactionDetails(null);
   };
 
+  // Success Screen
+  if (showSuccessScreen && transactionDetails) {
+    return (
+      <div className="mx-auto max-w-7xl py-8 px-4 sm:px-6 lg:px-8 min-h-screen">
+        <div className="flex justify-between items-baseline">
+          <h1 className="text-3xl font-bold mb-2 text-slate-800">Borrow</h1>
+        </div>
+        <Separator className="mb-8 bg-slate-200" />
+
+        <div className="max-w-2xl mx-auto">
+          <Card className="border border-slate-200 shadow-lg">
+            <CardContent className="pt-8 pb-8 text-center space-y-6">
+              <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
+                <CheckCircle2 className="h-8 w-8 text-green-600" />
+              </div>
+
+              <div>
+                <h2 className="text-2xl font-bold text-slate-800 mb-2">
+                  Borrow Successful!
+                </h2>
+                <p className="text-slate-600">
+                  Your position has been created successfully.
+                </p>
+              </div>
+
+              <div className="bg-slate-50 rounded-lg p-4 space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-slate-600">
+                    Collateral Deposited
+                  </span>
+                  <span className="font-semibold text-slate-800">
+                    <NumericFormat
+                      displayType="text"
+                      value={transactionDetails.collateralAmount}
+                      thousandSeparator=","
+                      decimalScale={7}
+                      fixedDecimalScale={false}
+                    />{" "}
+                    {TBTC_SYMBOL}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-slate-600">
+                    Amount Borrowed
+                  </span>
+                  <span className="font-semibold text-slate-800">
+                    <NumericFormat
+                      displayType="text"
+                      value={transactionDetails.borrowAmount}
+                      thousandSeparator=","
+                      decimalScale={2}
+                      fixedDecimalScale
+                    />{" "}
+                    bitUSD
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-slate-600">Interest Rate</span>
+                  <span className="font-semibold text-slate-800">
+                    {annualInterestRate / INTEREST_RATE_SCALE_DOWN_FACTOR} % APR
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex flex-col space-y-3">
+                <a
+                  href={`https://voyager.online/tx/${transactionDetails.transactionHash}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center gap-2 text-blue-600 hover:text-blue-700 font-medium"
+                >
+                  View Transaction <ExternalLink className="h-4 w-4" />
+                </a>
+
+                <Button
+                  onClick={handleNewBorrow}
+                  variant="outline"
+                  className="w-full"
+                >
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Create New Position
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  // Original form UI
   return (
     <div className="mx-auto max-w-7xl py-8 px-4 sm:px-6 lg:px-8 min-h-screen">
       <div className="flex justify-between items-baseline">
@@ -796,7 +956,11 @@ function Borrow() {
                   variant="outline"
                   size="icon"
                   className="h-7 w-7 rounded-full hover:bg-slate-100 transition-colors"
-                  onClick={handleRefresh}
+                  onClick={() => {
+                    setIsRefreshing(true);
+                    refetchBitcoin();
+                    refetchBitUSD();
+                  }}
                   disabled={isRefreshing}
                 >
                   <RefreshCw

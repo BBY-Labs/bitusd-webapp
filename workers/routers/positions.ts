@@ -87,6 +87,9 @@ export const positionsRouter = router({
           return { positions: [] as Position[] };
         }
 
+        // Fetch Bitcoin price once outside the loop
+        const bitcoinPrice = await getBitcoinprice();
+
         // Process positions in batches to avoid rate limiting
         const batchSize = 1;
         const resolvedPositions: (Position | null)[] = [];
@@ -118,7 +121,6 @@ export const positionsRouter = router({
                 latestTroveData.entire_debt as bigint,
                 BITUSD_DECIMALS
               );
-              const bitcoinPrice = await getBitcoinprice();
 
               const collateralValue =
                 collateralAmount * (Number(bitcoinPrice) / 1e18);

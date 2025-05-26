@@ -23,6 +23,11 @@ export const priceRouter = router({
       price: 1.0,
     };
   }),
+  getUserOnChainPositions: publicProcedure.query(async ({ ctx }) => {
+    return {
+      positions: [],
+    };
+  }),
 });
 
 export type PriceRouter = typeof priceRouter;

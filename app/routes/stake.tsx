@@ -270,9 +270,7 @@ function StakePage() {
   return (
     <div className="mx-auto max-w-7xl py-8 px-4 sm:px-6 lg:px-8 min-h-screen">
       <div className="flex justify-between items-baseline">
-        <h1 className="text-3xl font-bold mb-2 text-slate-800">
-          Stake your bitUSD
-        </h1>
+        <h1 className="text-3xl font-bold mb-2 text-slate-800">Stake bitUSD</h1>
       </div>
       <Separator className="mb-8 bg-slate-200" />
 

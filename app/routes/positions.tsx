@@ -4,7 +4,13 @@ import { Card, CardContent } from "~/components/ui/card";
 import { Separator } from "~/components/ui/separator";
 import { NumericFormat, type NumberFormatValues } from "react-number-format";
 import { Button } from "~/components/ui/button";
-import { ChevronsUpDown, ArrowUp, ArrowDown, HelpCircle } from "lucide-react";
+import {
+  ChevronsUpDown,
+  ArrowUp,
+  ArrowDown,
+  HelpCircle,
+  Loader2,
+} from "lucide-react";
 import { useState, useMemo } from "react";
 import {
   Dialog,
@@ -67,9 +73,12 @@ function PositionsPage() {
     isLoading: isLoadingPositions,
     isError: isErrorPositions,
   } = useQuery(
-    trpc.positionsRouter.getUserOnChainPositions.queryOptions({
-      userAddress: address as `0x${string}`,
-    })
+    trpc.positionsRouter.getUserOnChainPositions.queryOptions(
+      {
+        userAddress: address as `0x${string}`,
+      },
+      { enabled: !!address }
+    )
   );
 
   const sortedPositions = useMemo(() => {
@@ -196,198 +205,225 @@ function PositionsPage() {
 
   return (
     <div className="mx-auto max-w-7xl py-8 px-4 sm:px-6 lg:px-8 min-h-screen">
-      <h1 className="text-3xl font-bold text-slate-800 mb-2">Your Positions</h1>
-      <Separator className="mb-6 bg-slate-200" />
+      <div className="flex justify-between items-baseline">
+        <h1 className="text-3xl font-bold mb-2 text-slate-800">
+          Your positions
+        </h1>
+      </div>
+      <Separator className="mb-8 bg-slate-200" />
 
-      {isLoadingPositions && (
-        <p className="text-center text-slate-600 py-10">Loading positions...</p>
-      )}
-      {isErrorPositions && (
-        <p className="text-center text-red-600 py-10">
-          Error loading positions. Please try again later.
-        </p>
-      )}
+      {/* Content container with minimum height to prevent layout shift */}
+      <div className="min-h-[400px]">
+        {isLoadingPositions && (
+          <div className="flex justify-center items-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-slate-500" />
+          </div>
+        )}
 
-      {!isLoadingPositions &&
-        !isErrorPositions &&
-        (!sortedPositions || sortedPositions.length === 0) && (
-          <Card className="border border-slate-200 shadow-sm mt-6">
+        {isErrorPositions && (
+          <Card className="border border-slate-200 shadow-sm">
             <CardContent className="pt-6">
-              <p className="text-center text-slate-600">
-                You have no open positions.
+              <p className="text-center text-red-600">
+                Error loading positions. Please try again later.
               </p>
             </CardContent>
           </Card>
         )}
 
-      {!isLoadingPositions &&
-        !isErrorPositions &&
-        sortedPositions &&
-        sortedPositions.length > 0 && (
-          <>
-            <div className="overflow-x-auto shadow border-b border-slate-200 sm:rounded-lg">
-              <table className="min-w-full divide-y divide-slate-200">
-                <thead className="bg-slate-100">
-                  <tr>
-                    {renderHeader("Collateral", "collateralAmount")}
-                    {renderHeader("Collateral Value ($)", "collateralValue")}
-                    {renderHeader("Borrowed (bitUSD)", "borrowedAmount")}
-                    {renderHeader("Borrowable ($)", "amountBorrowable")}
-                    {renderHeader("Health Factor", "healthFactor")}
-                    {renderHeader("Liq. Price ($)", "liquidationPrice")}
-                    {renderHeader("Interest Rate (%)", "interestRate")}
-                    {renderHeader("Actions")} {/* Actions column */}
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-slate-200">
-                  {sortedPositions.map((position) => {
-                    const amountBorrowable =
-                      position.debtLimit - position.borrowedAmount;
-                    const healthDisplay = getHealthFactorDisplay(
-                      position.healthFactor
-                    );
-                    return (
-                      <tr
-                        key={position.id}
-                        className="hover:bg-slate-50 transition-colors"
-                      >
-                        <td className="px-2 py-3 whitespace-nowrap text-sm font-medium text-slate-800">
-                          <NumericFormat
-                            value={position.collateralAmount}
-                            displayType="text"
-                            thousandSeparator=","
-                            decimalScale={4}
-                          />{" "}
-                          {position.collateralAsset}
-                        </td>
-                        <td className="px-2 py-3 whitespace-nowrap text-sm text-slate-600">
-                          <NumericFormat
-                            value={position.collateralValue}
-                            displayType="text"
-                            thousandSeparator=","
-                            decimalScale={2}
-                            fixedDecimalScale
-                          />
-                        </td>
-                        <td className="px-2 py-3 whitespace-nowrap text-sm text-slate-600">
-                          <NumericFormat
-                            value={position.borrowedAmount}
-                            displayType="text"
-                            thousandSeparator=","
-                            decimalScale={2}
-                            fixedDecimalScale
-                          />
-                        </td>
-                        <td className="px-2 py-3 whitespace-nowrap text-sm text-slate-600">
-                          <NumericFormat
-                            value={amountBorrowable > 0 ? amountBorrowable : 0}
-                            displayType="text"
-                            thousandSeparator=","
-                            decimalScale={2}
-                            fixedDecimalScale
-                          />
-                        </td>
-                        <td
-                          className={`px-2 py-3 whitespace-nowrap text-sm font-semibold ${healthDisplay.color}`}
+        {!address && !isLoadingPositions && (
+          <Card className="border border-slate-200 shadow-sm">
+            <CardContent className="pt-6">
+              <p className="text-center text-slate-600">
+                Please connect your wallet to view positions.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {!isLoadingPositions &&
+          !isErrorPositions &&
+          address &&
+          (!sortedPositions || sortedPositions.length === 0) && (
+            <Card className="border border-slate-200 shadow-sm">
+              <CardContent className="pt-6">
+                <p className="text-center text-slate-600">
+                  You have no open positions.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
+        {!isLoadingPositions &&
+          !isErrorPositions &&
+          sortedPositions &&
+          sortedPositions.length > 0 && (
+            <>
+              <div className="overflow-x-auto shadow border-b border-slate-200 sm:rounded-lg">
+                <table className="min-w-full divide-y divide-slate-200">
+                  <thead className="bg-slate-100">
+                    <tr>
+                      {renderHeader("Collateral", "collateralAmount")}
+                      {renderHeader("Collateral Value ($)", "collateralValue")}
+                      {renderHeader("Borrowed (bitUSD)", "borrowedAmount")}
+                      {renderHeader("Borrowable ($)", "amountBorrowable")}
+                      {renderHeader("Health Factor", "healthFactor")}
+                      {renderHeader("Liq. Price ($)", "liquidationPrice")}
+                      {renderHeader("Interest Rate (%)", "interestRate")}
+                      {renderHeader("Actions")} {/* Actions column */}
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-slate-200">
+                    {sortedPositions.map((position) => {
+                      const amountBorrowable =
+                        position.debtLimit - position.borrowedAmount;
+                      const healthDisplay = getHealthFactorDisplay(
+                        position.healthFactor
+                      );
+                      return (
+                        <tr
+                          key={position.id}
+                          className="hover:bg-slate-50 transition-colors"
                         >
-                          {position.healthFactor.toFixed(2)}{" "}
-                          <span className="font-normal text-xs">
-                            ({healthDisplay.text})
-                          </span>
-                        </td>
-                        <td className="px-2 py-3 whitespace-nowrap text-sm text-slate-600">
+                          <td className="px-2 py-3 whitespace-nowrap text-sm font-medium text-slate-800">
+                            <NumericFormat
+                              value={position.collateralAmount}
+                              displayType="text"
+                              thousandSeparator=","
+                              decimalScale={4}
+                            />{" "}
+                            {position.collateralAsset}
+                          </td>
+                          <td className="px-2 py-3 whitespace-nowrap text-sm text-slate-600">
+                            <NumericFormat
+                              value={position.collateralValue}
+                              displayType="text"
+                              thousandSeparator=","
+                              decimalScale={2}
+                              fixedDecimalScale
+                            />
+                          </td>
+                          <td className="px-2 py-3 whitespace-nowrap text-sm text-slate-600">
+                            <NumericFormat
+                              value={position.borrowedAmount}
+                              displayType="text"
+                              thousandSeparator=","
+                              decimalScale={2}
+                              fixedDecimalScale
+                            />
+                          </td>
+                          <td className="px-2 py-3 whitespace-nowrap text-sm text-slate-600">
+                            <NumericFormat
+                              value={
+                                amountBorrowable > 0 ? amountBorrowable : 0
+                              }
+                              displayType="text"
+                              thousandSeparator=","
+                              decimalScale={2}
+                              fixedDecimalScale
+                            />
+                          </td>
+                          <td
+                            className={`px-2 py-3 whitespace-nowrap text-sm font-semibold ${healthDisplay.color}`}
+                          >
+                            {position.healthFactor.toFixed(2)}{" "}
+                            <span className="font-normal text-xs">
+                              ({healthDisplay.text})
+                            </span>
+                          </td>
+                          <td className="px-2 py-3 whitespace-nowrap text-sm text-slate-600">
+                            <NumericFormat
+                              value={position.liquidationPrice}
+                              displayType="text"
+                              thousandSeparator=","
+                              decimalScale={2}
+                              fixedDecimalScale
+                            />{" "}
+                            / {position.collateralAsset}
+                          </td>
+                          <td className="px-2 py-3 whitespace-nowrap text-sm text-slate-600">
+                            <NumericFormat
+                              value={position.interestRate}
+                              displayType="text"
+                              suffix="%"
+                              decimalScale={2}
+                              fixedDecimalScale
+                            />
+                          </td>
+                          <td className="px-2 py-3 whitespace-nowrap text-sm text-slate-600">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleManageClick(position)}
+                            >
+                              Manage
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot className="bg-slate-100 border-t-2 border-slate-300">
+                    <tr>
+                      <td className="px-2 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
+                        Totals
+                      </td>
+                      <td className="px-2 py-3 text-left text-sm font-semibold text-slate-700">
+                        <NumericFormat
+                          value={totals.collateralValue}
+                          displayType="text"
+                          prefix="$"
+                          thousandSeparator=","
+                          decimalScale={2}
+                          fixedDecimalScale
+                        />
+                      </td>
+                      <td className="px-2 py-3 text-left text-sm font-semibold text-slate-700">
+                        <NumericFormat
+                          value={totals.borrowedAmount}
+                          displayType="text"
+                          thousandSeparator=","
+                          decimalScale={2}
+                          fixedDecimalScale
+                        />{" "}
+                        bitUSD
+                      </td>
+                      <td className="px-2 py-3 text-left text-sm font-semibold text-slate-700">
+                        <NumericFormat
+                          value={totals.amountBorrowable}
+                          displayType="text"
+                          prefix="$"
+                          thousandSeparator=","
+                          decimalScale={2}
+                          fixedDecimalScale
+                        />
+                      </td>
+                      <td className="px-2 py-3"></td>
+                      <td className="px-2 py-3"></td>
+                      <td className="px-2 py-3 text-left text-sm font-semibold text-slate-700">
+                        <div className="relative group flex items-center">
                           <NumericFormat
-                            value={position.liquidationPrice}
-                            displayType="text"
-                            thousandSeparator=","
-                            decimalScale={2}
-                            fixedDecimalScale
-                          />{" "}
-                          / {position.collateralAsset}
-                        </td>
-                        <td className="px-2 py-3 whitespace-nowrap text-sm text-slate-600">
-                          <NumericFormat
-                            value={position.interestRate}
+                            value={totals.weightedAverageInterest}
                             displayType="text"
                             suffix="%"
                             decimalScale={2}
                             fixedDecimalScale
                           />
-                        </td>
-                        <td className="px-2 py-3 whitespace-nowrap text-sm text-slate-600">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleManageClick(position)}
-                          >
-                            Manage
-                          </Button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-                <tfoot className="bg-slate-100 border-t-2 border-slate-300">
-                  <tr>
-                    <td className="px-2 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
-                      Totals
-                    </td>
-                    <td className="px-2 py-3 text-left text-sm font-semibold text-slate-700">
-                      <NumericFormat
-                        value={totals.collateralValue}
-                        displayType="text"
-                        prefix="$"
-                        thousandSeparator=","
-                        decimalScale={2}
-                        fixedDecimalScale
-                      />
-                    </td>
-                    <td className="px-2 py-3 text-left text-sm font-semibold text-slate-700">
-                      <NumericFormat
-                        value={totals.borrowedAmount}
-                        displayType="text"
-                        thousandSeparator=","
-                        decimalScale={2}
-                        fixedDecimalScale
-                      />{" "}
-                      bitUSD
-                    </td>
-                    <td className="px-2 py-3 text-left text-sm font-semibold text-slate-700">
-                      <NumericFormat
-                        value={totals.amountBorrowable}
-                        displayType="text"
-                        prefix="$"
-                        thousandSeparator=","
-                        decimalScale={2}
-                        fixedDecimalScale
-                      />
-                    </td>
-                    <td className="px-2 py-3"></td>
-                    <td className="px-2 py-3"></td>
-                    <td className="px-2 py-3 text-left text-sm font-semibold text-slate-700">
-                      <div className="relative group flex items-center">
-                        <NumericFormat
-                          value={totals.weightedAverageInterest}
-                          displayType="text"
-                          suffix="%"
-                          decimalScale={2}
-                          fixedDecimalScale
-                        />
-                        <HelpCircle className="h-3 w-3 ml-1 text-slate-400 cursor-help" />
-                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-60 p-2 bg-slate-800 text-white rounded shadow-lg text-xs opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none">
-                          Weighted average interest rate based on borrowed
-                          amount.
+                          <HelpCircle className="h-3 w-3 ml-1 text-slate-400 cursor-help" />
+                          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-60 p-2 bg-slate-800 text-white rounded shadow-lg text-xs opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none">
+                            Weighted average interest rate based on borrowed
+                            amount.
+                          </div>
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-2 py-3"></td>{" "}
-                    {/* Cell for Actions column in footer */}
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          </>
-        )}
+                      </td>
+                      <td className="px-2 py-3"></td>{" "}
+                      {/* Cell for Actions column in footer */}
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </>
+          )}
+      </div>
 
       {selectedPosition && (
         <Dialog open={isManageModalOpen} onOpenChange={setIsManageModalOpen}>

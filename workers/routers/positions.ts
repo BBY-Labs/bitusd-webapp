@@ -49,6 +49,11 @@ export const positionsRouter = router({
 
       console.log("Fetching owner positions for address:", userAddress);
 
+      if (!process.env.NODE_URL) {
+        console.error("NODE_URL environment variable is not defined");
+        throw new Error("RPC node URL not configured");
+      }
+
       const myProvider = new RpcProvider({
         nodeUrl: process.env.NODE_URL,
       });
@@ -63,12 +68,37 @@ export const positionsRouter = router({
         const ownerPositionsResult =
           await troveManagerContract.get_owner_to_positions(userAddress);
 
-        if (!ownerPositionsResult || ownerPositionsResult.length === 0) {
+        console.log("Raw contract response:", ownerPositionsResult);
+
+        let troveIds: bigint[] = [];
+
+        if (
+          ownerPositionsResult === undefined ||
+          ownerPositionsResult === null
+        ) {
+          console.log("No positions found for user:", userAddress);
           return { positions: [] as Position[] };
         }
-        const troveIds = ownerPositionsResult ?? [];
 
-        if (troveIds.length === 0) {
+        if (Array.isArray(ownerPositionsResult)) {
+          troveIds = ownerPositionsResult;
+        } else if (
+          ownerPositionsResult &&
+          typeof ownerPositionsResult === "object"
+        ) {
+          const possibleArrayKeys = ["result", "data", "0", "positions"];
+          for (const key of possibleArrayKeys) {
+            if (
+              key in ownerPositionsResult &&
+              Array.isArray(ownerPositionsResult[key])
+            ) {
+              troveIds = ownerPositionsResult[key];
+              break;
+            }
+          }
+        }
+
+        if (!Array.isArray(troveIds) || troveIds.length === 0) {
           return { positions: [] as Position[] };
         }
 

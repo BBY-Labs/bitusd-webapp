@@ -4,7 +4,6 @@ import { z } from "zod/v4";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardFooter,
   CardHeader,
   CardTitle,
@@ -38,24 +37,14 @@ import {
   computeLTVFromBorrowAmount,
   MAX_LIMIT,
   MAX_LTV,
+  getAnnualInterestRate,
 } from "~/lib/utils/calc";
 import type { Route } from "./+types/dashboard";
-import {
-  useAccount,
-  useBalance,
-  useContract,
-  useSendTransaction,
-} from "@starknet-react/core";
-import {
-  TBTC_ADDRESS,
-  TBTC_SYMBOL,
-  BORROWER_OPERATIONS_ABI,
-  TROVE_MANAGER_ABI,
-  BORROWER_OPERATIONS_ADDRESS,
-  TBTC_ABI,
-  BITUSD_ADDRESS,
-  TM_ADDRESS,
-} from "~/lib/constants";
+import { useAccount, useBalance, useContract } from "@starknet-react/core";
+import { TBTC_ADDRESS, TBTC_SYMBOL } from "~/lib/constants";
+import { useBorrowTransaction } from "~/hooks/use-borrow-transaction";
+import { getLtvColor } from "~/lib/utils";
+import { getBorrowButtonText } from "~/lib/utils/form";
 
 const createBorrowFormSchema = (
   currentBitcoinPrice: number | undefined,
@@ -151,6 +140,7 @@ const createBorrowFormSchema = (
 
 function Borrow() {
   const [selectedRate, setSelectedRate] = useState("fixed");
+  const [selfManagedRate, setSelfManagedRate] = useState(5);
   const [collateralAmount, setCollateralAmount] = useState<number | undefined>(
     undefined
   );
@@ -158,80 +148,33 @@ function Borrow() {
     undefined
   );
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [selfManagedRate, setSelfManagedRate] = useState(5);
 
   const trpc = useTRPC();
-  const {
-    data: bitcoin,
-    refetch: refetchBitcoin,
-    isFetching: isFetchingBitcoin,
-  } = useQuery({
+  const { data: bitcoin, refetch: refetchBitcoin } = useQuery({
     ...trpc.priceRouter.getBitcoinPrice.queryOptions(),
     refetchInterval: 30000, // Refetch every 30 seconds
   });
-  const {
-    data: bitUSD,
-    refetch: refetchBitUSD,
-    isFetching: isFetchingBitUSD,
-  } = useQuery({
+  const { data: bitUSD, refetch: refetchBitUSD } = useQuery({
     ...trpc.priceRouter.getBitUSDPrice.queryOptions(),
     refetchInterval: 30000, // Refetch every 30 seconds
   });
-
   const { address } = useAccount();
-
   const { data: bitcoinBalance } = useBalance({
     token: TBTC_ADDRESS,
     address: address,
   });
 
-  const { data: bitUSDBalance } = useBalance({
-    token: BITUSD_ADDRESS,
-    address: address,
-  });
+  // Calculate annual interest rate
+  const annualInterestRate = useMemo(() => {
+    return getAnnualInterestRate(selectedRate, selfManagedRate);
+  }, [selectedRate, selfManagedRate]);
 
-  // Set up contracts
-  const { contract: tbtcContract } = useContract({
-    abi: TBTC_ABI,
-    address: TBTC_ADDRESS,
+  // Replace the existing useSendTransaction with the new hook
+  const { send, isPending, isSuccess, error, isReady } = useBorrowTransaction({
+    collateralAmount,
+    borrowAmount,
+    annualInterestRate,
   });
-
-  const { contract: borrowerContract } = useContract({
-    abi: BORROWER_OPERATIONS_ABI,
-    address: BORROWER_OPERATIONS_ADDRESS,
-  });
-
-  const { contract: troveManagerContract } = useContract({
-    abi: TROVE_MANAGER_ABI,
-    address: TM_ADDRESS,
-  });
-
-  // Fetch owner's positions to determine owner_index
-  const { data: ownerPositions, isLoading: isLoadingOwnerPositions } = useQuery({
-    queryKey: ["ownerPositions", address, TM_ADDRESS],
-    queryFn: async () => {
-      if (!troveManagerContract || !address) return null;
-      try {
-        const positions = await troveManagerContract.get_owner_to_positions(address);
-        return positions as bigint[]; // Assuming positions is an array of bigints (u256)
-      } catch (e) {
-        console.error("Error fetching owner positions:", e);
-        return null;
-      }
-    },
-    enabled: !!troveManagerContract && !!address,
-    refetchInterval: 30000, // Optional: refetch periodically
-  });
-
-  const ownerIndex = useMemo(() => {
-    if (ownerPositions && Array.isArray(ownerPositions)) {
-      return BigInt(ownerPositions.length);
-    }
-    // Default to 0n if positions are not yet loaded or an error occurred,
-    // or if you prefer to wait, return undefined and adjust `calls` dependencies.
-    // For opening a new trove, if this is the *first* for the owner, length 0 is correct.
-    return 0n;
-  }, [ownerPositions]);
 
   // Auto-updating validation based on all dependencies
   const formErrors = useMemo(() => {
@@ -270,24 +213,23 @@ function Borrow() {
       const ltv =
         borrowAmount > 0
           ? computeLTVFromBorrowAmount(
-            borrowAmount,
-            collateralAmount,
-            bitcoin.price
-          )
+              borrowAmount,
+              collateralAmount,
+              bitcoin.price
+            )
           : 0;
       return Math.round(ltv * 100);
     }
     return 0;
   }, [collateralAmount, borrowAmount, bitcoin?.price]);
 
-  // Function to determine the color based on LTV value
-  const getLtvColor = () => {
-    if (ltvValue <= 25) return "bg-green-500";
-    if (ltvValue <= 50) return "bg-blue-500";
-    if (ltvValue <= 70) return "bg-yellow-500";
-    return "bg-red-500";
-  };
+  // Remove the getButtonText function and use the imported one
+  const buttonText = useMemo(
+    () => getBorrowButtonText(formErrors),
+    [formErrors]
+  );
 
+  // Handlers
   const handleCollateralChange = (values: NumberFormatValues) => {
     setCollateralAmount(Number(values.value));
   };
@@ -324,103 +266,8 @@ function Borrow() {
     }
   };
 
-  // Helper function to convert interest rate
-  const getAnnualInterestRate = (rateType: string): bigint => {
-    switch (rateType) {
-      case "fixed":
-        return BigInt(5 * 1e16); // 5% as 18-decimal number
-      case "variable":
-        return BigInt(4.5 * 1e16); // 4.5% as 18-decimal number
-      case "selfManaged":
-        return BigInt(selfManagedRate * 1e16); // Use slider value
-      default:
-        return BigInt(5 * 1e16);
-    }
-  };
-
-  // Create batched transaction calls
-  const calls =
-    tbtcContract &&
-      borrowerContract &&
-      address &&
-      collateralAmount &&
-      borrowAmount &&
-      !isLoadingOwnerPositions && // Ensure ownerIndex is derived from loaded data
-      ownerIndex !== undefined // ownerIndex is now calculated above
-      ? [
-        // 1. Approve TBTC spending
-        tbtcContract.populate("approve", [
-          BORROWER_OPERATIONS_ADDRESS,
-          BigInt(Math.floor(collateralAmount * 1e18)), // Approve exact collateral amount
-        ]),
-        // 2. Open trove
-        borrowerContract.populate("open_trove", [
-          address, // owner
-          ownerIndex, // owner_index (DYNAMICALLY SET)
-          BigInt(Math.floor(collateralAmount * 1e18)), // coll_amount in wei
-          BigInt(Math.floor(borrowAmount * 1e18)), // bitusd_amount in wei
-          0n, // upper_hint
-          0n, // lower_hint
-          getAnnualInterestRate(selectedRate), // annual_interest_rate
-          BigInt(2) ** BigInt(256) - BigInt(1), // max_upfront_fee (1 token max)
-          "0x0", // add_manager (none)
-          "0x0", // remove_manager (none)
-          address, // receiver (same as owner)
-        ]),
-      ]
-      : undefined;
-
-  // Set up the transaction
-  const { send, isPending, isSuccess, error } = useSendTransaction({ calls });
-
-  const getButtonText = () => {
-    if (formErrors) {
-      const insufficientBalanceError = formErrors.issues.find(
-        (issue) =>
-          issue.path.includes("collateralAmount") &&
-          issue.message === "Insufficient balance."
-      );
-      if (insufficientBalanceError) {
-        return "Insufficient balance";
-      }
-
-      const collateralTooHighError = formErrors.issues.find(
-        (issue) =>
-          issue.path.includes("borrowAmount") &&
-          issue.message === "Not enough collateral to borrow this amount."
-      );
-      if (collateralTooHighError) {
-        return "Not enough collateral";
-      }
-
-      const borrowTooSmallError = formErrors.issues.find(
-        (issue) =>
-          issue.path.includes("borrowAmount") &&
-          issue.message === "Minimum borrow amount is $100."
-      );
-      if (borrowTooSmallError) {
-        return "Minimum $100 borrow";
-      }
-
-      const needCollateralError = formErrors.issues.find(
-        (issue) =>
-          issue.path.includes("borrowAmount") &&
-          issue.message ===
-          "Please enter a valid collateral amount before specifying a borrow amount."
-      );
-      if (needCollateralError) {
-        return "Enter collateral first";
-      }
-
-      // Fallback for any other validation errors
-      return "Check inputs";
-    }
-
-    return "Borrow";
-  };
-
   const handleBorrowClick = () => {
-    if (calls && !formErrors) {
+    if (isReady && !formErrors) {
       send();
     }
   };
@@ -713,14 +560,15 @@ function Borrow() {
                     </div>
                     <div className="text-right">
                       <span
-                        className={`text-sm font-bold ${ltvValue <= 25
-                          ? "text-green-600"
-                          : ltvValue <= 50
+                        className={`text-sm font-bold ${
+                          ltvValue <= 25
+                            ? "text-green-600"
+                            : ltvValue <= 50
                             ? "text-blue-600"
                             : ltvValue <= 70
-                              ? "text-yellow-600"
-                              : "text-red-600"
-                          }`}
+                            ? "text-yellow-600"
+                            : "text-red-600"
+                        }`}
                       >
                         {ltvValue}%
                       </span>
@@ -738,7 +586,9 @@ function Borrow() {
 
                       {/* Colored portion based on current value (max 90% of width) */}
                       <div
-                        className={`absolute left-0 top-0 h-full ${getLtvColor()} transition-all duration-300`}
+                        className={`absolute left-0 top-0 h-full ${getLtvColor(
+                          ltvValue
+                        )} transition-all duration-300`}
                         style={{ width: `${ltvValue * MAX_LTV}%` }}
                       ></div>
 
@@ -768,7 +618,7 @@ function Borrow() {
                   className="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-medium py-2 px-6 rounded-xl shadow-sm hover:shadow transition-all whitespace-nowrap"
                   onClick={handleBorrowClick}
                 >
-                  {getButtonText()}
+                  {buttonText}
                 </Button>
               </div>
 
@@ -780,10 +630,11 @@ function Borrow() {
                 <div className="grid grid-cols-1 gap-2">
                   {/* Fixed Rate Option */}
                   <div
-                    className={`relative ${selectedRate === "fixed"
-                      ? "bg-blue-50 border-2 border-blue-500"
-                      : "bg-slate-50 border-2 border-transparent hover:border-slate-200"
-                      } rounded-lg p-3 cursor-pointer transition-all min-h-[60px]`}
+                    className={`relative ${
+                      selectedRate === "fixed"
+                        ? "bg-blue-50 border-2 border-blue-500"
+                        : "bg-slate-50 border-2 border-transparent hover:border-slate-200"
+                    } rounded-lg p-3 cursor-pointer transition-all min-h-[60px]`}
                     onClick={() => setSelectedRate("fixed")}
                   >
                     {selectedRate === "fixed" && (
@@ -806,8 +657,9 @@ function Borrow() {
                       </h4>
                     </div>
                     <p
-                      className={`text-xs text-slate-600 ${selectedRate === "fixed" ? "" : "invisible"
-                        }`}
+                      className={`text-xs text-slate-600 ${
+                        selectedRate === "fixed" ? "" : "invisible"
+                      }`}
                     >
                       Lock in a stable 5% interest rate for the duration of your
                       loan. Perfect for those who prefer predictable payments.
@@ -816,10 +668,11 @@ function Borrow() {
 
                   {/* Variable Rate Option */}
                   <div
-                    className={`relative ${selectedRate === "variable"
-                      ? "bg-blue-50 border-2 border-blue-500"
-                      : "bg-slate-50 border-2 border-transparent hover:border-slate-200"
-                      } rounded-lg p-3 cursor-pointer transition-all min-h-[60px]`}
+                    className={`relative ${
+                      selectedRate === "variable"
+                        ? "bg-blue-50 border-2 border-blue-500"
+                        : "bg-slate-50 border-2 border-transparent hover:border-slate-200"
+                    } rounded-lg p-3 cursor-pointer transition-all min-h-[60px]`}
                     onClick={() => setSelectedRate("variable")}
                   >
                     {selectedRate === "variable" && (
@@ -835,8 +688,9 @@ function Borrow() {
                       </h4>
                     </div>
                     <p
-                      className={`text-xs text-slate-600 ${selectedRate === "variable" ? "" : "invisible"
-                        }`}
+                      className={`text-xs text-slate-600 ${
+                        selectedRate === "variable" ? "" : "invisible"
+                      }`}
                     >
                       Interest rate adjusts based on market conditions.
                       Currently averaging 4.5%. May offer lower rates than fixed
@@ -846,10 +700,11 @@ function Borrow() {
 
                   {/* Self Managed Option */}
                   <div
-                    className={`relative ${selectedRate === "selfManaged"
-                      ? "bg-blue-50 border-2 border-blue-500"
-                      : "bg-slate-50 border-2 border-transparent hover:border-slate-200"
-                      } rounded-lg p-3 cursor-pointer transition-all min-h-[60px]`}
+                    className={`relative ${
+                      selectedRate === "selfManaged"
+                        ? "bg-blue-50 border-2 border-blue-500"
+                        : "bg-slate-50 border-2 border-transparent hover:border-slate-200"
+                    } rounded-lg p-3 cursor-pointer transition-all min-h-[60px]`}
                     onClick={() => setSelectedRate("selfManaged")}
                   >
                     {selectedRate === "selfManaged" && (
@@ -865,8 +720,9 @@ function Borrow() {
                       </h4>
                     </div>
                     <p
-                      className={`text-xs text-slate-600 mb-3 ${selectedRate === "selfManaged" ? "" : "invisible"
-                        }`}
+                      className={`text-xs text-slate-600 mb-3 ${
+                        selectedRate === "selfManaged" ? "" : "invisible"
+                      }`}
                     >
                       Take control of your interest rate by actively managing
                       your position.
@@ -893,14 +749,20 @@ function Borrow() {
                             {/* Colored portion based on current value */}
                             <div
                               className="absolute left-0 top-0 h-full bg-blue-500 transition-all duration-300"
-                              style={{ width: `${((selfManagedRate - 0.5) / 19.5) * 100}%` }}
+                              style={{
+                                width: `${
+                                  ((selfManagedRate - 0.5) / 19.5) * 100
+                                }%`,
+                              }}
                             ></div>
                           </div>
 
                           {/* Slider component */}
                           <Slider
                             value={[selfManagedRate]}
-                            onValueChange={(value) => setSelfManagedRate(value[0])}
+                            onValueChange={(value) =>
+                              setSelfManagedRate(value[0])
+                            }
                             min={0.5}
                             max={20}
                             step={0.1}
@@ -938,8 +800,9 @@ function Borrow() {
                   disabled={isRefreshing}
                 >
                   <RefreshCw
-                    className={`h-3.5 w-3.5 text-slate-600 ${isRefreshing ? "animate-spin" : ""
-                      }`}
+                    className={`h-3.5 w-3.5 text-slate-600 ${
+                      isRefreshing ? "animate-spin" : ""
+                    }`}
                     style={
                       isRefreshing ? { animationDuration: "2s" } : undefined
                     }
@@ -1060,7 +923,7 @@ function Borrow() {
 
 export default Borrow;
 
-export function meta({ }: Route.MetaArgs) {
+export function meta({}: Route.MetaArgs) {
   return [
     { title: "BitUSD" },
     { name: "This is bitUSD", content: "Welcome to bitUSD!" },

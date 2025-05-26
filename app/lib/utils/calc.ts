@@ -82,3 +82,25 @@ export function computeLTVFromBorrowAmount(
   const collateralValue = collateralAmount * bitcoinPrice;
   return borrowAmount / collateralValue;
 }
+
+/**
+ * Helper function to convert interest rate type to annual interest rate
+ * @param rateType - The type of interest rate (fixed, variable, selfManaged)
+ * @param selfManagedRate - The self-managed rate value (only used when rateType is 'selfManaged')
+ * @returns The annual interest rate as a bigint (18-decimal number)
+ */
+export function getAnnualInterestRate(
+  rateType: string,
+  selfManagedRate?: number
+): bigint {
+  switch (rateType) {
+    case "fixed":
+      return BigInt(5 * 1e16); // 5% as 18-decimal number
+    case "variable":
+      return BigInt(4.5 * 1e16); // 4.5% as 18-decimal number
+    case "selfManaged":
+      return BigInt((selfManagedRate || 5) * 1e16); // Use slider value or default to 5%
+    default:
+      return BigInt(5 * 1e16);
+  }
+}

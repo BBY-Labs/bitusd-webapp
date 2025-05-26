@@ -4,12 +4,15 @@ import {
   useContract,
   useSendTransaction,
 } from "@starknet-react/core";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "~/components/ui/button";
 import { TBTC_ABI, TBTC_ADDRESS } from "~/lib/constants";
 
 export function GetTestBtc() {
-  const { address } = useAccount();
+  const queryClient = useQueryClient();
+
+  const { address, chainId } = useAccount();
   const { data: balance } = useBalance({
     address,
     token: TBTC_ADDRESS,
@@ -24,12 +27,29 @@ export function GetTestBtc() {
       contract && address
         ? [contract.populate("mint", [address, 1000000000000000000n])] // Mint 1 testBTC (1 * 10^18)
         : undefined,
+    onSuccess: () => {
+      // Invalidate the balance query to refresh the balance
+      queryClient.invalidateQueries({
+        queryKey: [
+          {
+            entity: "balance",
+            chainId: chainId,
+            token: TBTC_ADDRESS,
+            address: address,
+            blockIdentifier: "latest",
+          },
+        ],
+      });
+      toast.success("Successfully minted 1 testBTC");
+    },
+    onError: (error) => {
+      toast.error("Failed to mint testBTC");
+    },
   });
 
   const handleMint = () => {
     if (contract && address) {
       send();
-      toast("Successfully minted 1 testBTC");
     }
   };
 

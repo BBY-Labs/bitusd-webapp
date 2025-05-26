@@ -28,6 +28,7 @@ import {
   TBTC_DECIMALS,
   TBTC_SYMBOL,
 } from "~/lib/constants";
+import { useTRPC } from "~/lib/trpc";
 
 // Placeholder constants for calculations - these should ideally come from a config or Oracle
 const BTC_PRICE_USD = 40000; // Placeholder: Current price of 1 BTC in USD
@@ -99,153 +100,34 @@ const formatInterestRateForDisplay = (rawValue: bigint): number => {
 };
 
 function PositionsPage() {
-  const { address } = useAccount();
-
-  const { contract: troveManagerContract } = useContract({
-    abi: TROVE_MANAGER_ABI,
-    address: TM_ADDRESS,
-  });
-
-  const {
-    data: positionsData,
-    isLoading: isLoadingPositions,
-    isError: isErrorPositions,
-  } = useQuery<Position[]>({
-    queryKey: ["userOnChainPositions", address],
-    queryFn: async () => {
-      if (!address) {
-        console.log("Address not available, returning empty array.");
-        return [];
-      }
-
-      try {
-        console.log("Fetching owner positions for address:", address);
-        // 1. Get all trove IDs for the owner
-        // The ABI for get_owner_to_positions indicates it returns Array<core::integer::u256>
-        // StarkNet.js typically deserializes this to bigint[]
-        const ownerPositionsResult =
-          await troveManagerContract?.get_owner_to_positions(address);
-        console.log("ownerPositionsResult:", ownerPositionsResult);
-
-        if (!ownerPositionsResult || ownerPositionsResult.length === 0) {
-          console.log("No trove IDs found for owner or result is empty.");
-          return [];
-        }
-        const troveIds = ownerPositionsResult ?? [];
-        console.log("Parsed troveIds:", troveIds);
-
-        if (troveIds.length === 0) {
-          console.log("troveIds array is empty after parsing.");
-          return [];
-        }
-
-        // 2. For each trove ID, get its latest data
-        console.log(
-          `Fetching latest trove data for ${troveIds.length} trove(s).`
-        );
-        const positionPromises = troveIds.map(async (troveId) => {
-          console.log("Fetching data for troveId:", troveId.toString());
-          const latestTroveData =
-            await troveManagerContract?.get_latest_trove_data(troveId);
-
-          console.log(
-            "latestTroveData for troveId",
-            troveId.toString(),
-            ":",
-            latestTroveData
-          );
-
-          if (
-            !latestTroveData ||
-            typeof latestTroveData.entire_coll === "undefined" ||
-            typeof latestTroveData.entire_debt === "undefined"
-          ) {
-            console.warn(
-              "Incomplete or undefined latestTroveData for troveId:",
-              troveId.toString(),
-              latestTroveData
-            );
-            return null; // Return null if data is incomplete, will be filtered out
-          }
-
-          const collateralAmount = formatBigIntToNumber(
-            latestTroveData.entire_coll as bigint,
-            TBTC_DECIMALS
-          );
-          const borrowedAmount = formatBigIntToNumber(
-            latestTroveData.entire_debt as bigint,
-            BITUSD_DECIMALS
-          );
-          const collateralValue = collateralAmount * BTC_PRICE_USD;
-
-          let healthFactor = Infinity;
-          if (borrowedAmount > 0) {
-            healthFactor = collateralValue / borrowedAmount / MCR_VALUE;
-          }
-
-          let liquidationPrice = 0;
-          if (collateralAmount > 0) {
-            liquidationPrice = (borrowedAmount * MCR_VALUE) / collateralAmount;
-          }
-
-          const debtLimit = collateralValue / ICR_VALUE;
-          const interestRate = formatInterestRateForDisplay(
-            latestTroveData.annual_interest_rate as bigint
-          );
-
-          const position = {
-            id: troveId.toString(),
-            collateralAsset: TBTC_SYMBOL,
-            collateralAmount,
-            collateralValue,
-            borrowedAsset: "bitUSD", // Assuming borrowed asset is always bitUSD
-            borrowedAmount,
-            healthFactor,
-            liquidationPrice,
-            debtLimit,
-            interestRate,
-          };
-          console.log(
-            "Processed position for troveId",
-            troveId.toString(),
-            ":",
-            position
-          );
-          return position;
-        });
-
-        const resolvedPositions = await Promise.all(positionPromises);
-        console.log("Resolved positions (before filter):", resolvedPositions);
-
-        const filteredPositions = resolvedPositions.filter(
-          (p) => p !== null
-        ) as Position[];
-        console.log("Filtered positions (after filter):", filteredPositions);
-        return filteredPositions;
-      } catch (error) {
-        console.error("Error fetching user positions inside queryFn:", error);
-        // Consider re-throwing or returning an empty array to let react-query handle error state
-        throw error; // Or return [] and rely on isErrorPositions
-      }
-    },
-    enabled: !!address, // Only run query if address is available
-  });
-
   const [sortConfig, setSortConfig] = useState<SortConfig | null>(null);
   const [selectedPosition, setSelectedPosition] = useState<Position | null>(
     null
   );
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
   const [repayAmount, setRepayAmount] = useState<number | undefined>(undefined);
-  // TODO: Add state for 'borrow more' amount if implementing that part fully
 
-  const positionsToDisplay = useMemo(
-    () => positionsData || [],
-    [positionsData]
+  const { address } = useAccount();
+  const trpc = useTRPC();
+
+  const {
+    data: positionsData,
+    isLoading: isLoadingPositions,
+    isError: isErrorPositions,
+  } = useQuery(
+    trpc.positionsRouter.getUserOnChainPositions.queryOptions({
+      userAddress: address as `0x${string}`,
+    })
   );
 
+  // TODO: Add state for 'borrow more' amount if implementing that part fully
+  // const positionsToDisplay = useMemo(
+  //   () => positionsData?.positions || [],
+  //   [positionsData]
+  // );
+
   const sortedPositions = useMemo(() => {
-    let sortableItems = [...positionsToDisplay];
+    let sortableItems = [...(positionsData?.positions || [])];
     if (sortConfig !== null) {
       sortableItems.sort((a, b) => {
         let aValue: number;
@@ -270,12 +152,12 @@ function PositionsPage() {
       });
     }
     return sortableItems;
-  }, [positionsToDisplay, sortConfig]);
+  }, [positionsData?.positions, sortConfig]);
 
   const totals = useMemo(() => {
     let totalBorrowed = 0;
     let totalWeightedInterestProduct = 0;
-    const result = positionsToDisplay.reduce(
+    const result = positionsData?.positions?.reduce(
       (acc, p) => {
         acc.borrowedAmount += p.borrowedAmount;
         acc.collateralValue += p.collateralValue;
@@ -289,7 +171,7 @@ function PositionsPage() {
     const weightedAverageInterest =
       totalBorrowed > 0 ? totalWeightedInterestProduct / totalBorrowed : 0;
     return { ...result, weightedAverageInterest };
-  }, [positionsToDisplay]);
+  }, [positionsData?.positions]);
 
   const requestSort = (key: SortableKey) => {
     let direction: "ascending" | "descending" = "ascending";

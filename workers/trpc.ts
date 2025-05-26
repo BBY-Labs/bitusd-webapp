@@ -1,5 +1,6 @@
 import { initTRPC } from "@trpc/server";
 import type { Bindings } from "hono/types";
+import type { RpcProvider } from "starknet";
 
 export interface CloudflareBindings extends Bindings {
   VALUE_FROM_CLOUDFLARE: string;
@@ -10,6 +11,7 @@ export interface CloudflareBindings extends Bindings {
 export type HonoContext = {
   env: CloudflareBindings;
   executionCtx: ExecutionContext;
+  starknetProvider: RpcProvider;
   // honoReq: import(\'hono\').Context[\'req\']; // could also include the raw Hono request if needed
 };
 

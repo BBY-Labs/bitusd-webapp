@@ -179,7 +179,7 @@ function Borrow() {
   const { data: bitcoinBalance } = useBalance({
     token: TBTC_ADDRESS,
     address: address,
-    watch: true,
+    refetchInterval: 30000,
   });
 
   // Store transaction details for success screen
@@ -216,18 +216,22 @@ function Borrow() {
     setTransactionSubmitted(true);
   }
 
+  // Create the schema inside useMemo so it updates when bitcoinBalance changes
+  const borrowFormSchema = useMemo(() => {
+    return createBorrowFormSchema(
+      bitcoin?.price,
+      bitUSD?.price,
+      bitcoinBalance
+    );
+  }, [bitcoin?.price, bitUSD?.price, bitcoinBalance]);
+
   // Auto-updating validation based on all dependencies
   const formErrors = useMemo(() => {
     if (collateralAmount === undefined && borrowAmount === undefined) {
       return null;
     }
 
-    const schema = createBorrowFormSchema(
-      bitcoin?.price,
-      bitUSD?.price,
-      bitcoinBalance
-    );
-    const validationResult = schema.safeParse({
+    const validationResult = borrowFormSchema.safeParse({
       collateralAmount,
       borrowAmount,
     });
@@ -236,9 +240,7 @@ function Borrow() {
   }, [
     collateralAmount,
     borrowAmount,
-    bitcoin?.price,
-    bitUSD?.price,
-    bitcoinBalance,
+    borrowFormSchema, // Use the memoized schema
   ]);
 
   // Auto-updating LTV calculation

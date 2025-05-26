@@ -47,6 +47,25 @@ export const TBTC_ABI = [
   },
 ] as const satisfies Abi;
 
+export const TROVE_MANAGER_ABI = [
+  {
+    type: "function",
+    name: "get_owner_to_positions",
+    inputs: [
+      {
+        name: "owner",
+        type: "core::starknet::contract_address::ContractAddress",
+      },
+    ],
+    outputs: [
+      {
+        type: "core::array::Array::<core::integer::u256>",
+      },
+    ],
+    state_mutability: "view",
+  },
+] as const satisfies Abi;
+
 export const BORROWER_OPERATIONS_ADDRESS =
   "0x7362108a497aac0328a1df2b2699cb07df805bb05a180b69c6431e8c0443c03";
 export const AP_ADDRESS =
@@ -60,6 +79,7 @@ export const SORTED_TROVES_ADDRESS =
 export const TM_ADDRESS =
   "0x119b8feaa5585d99023185a1ea42086bc125ee4c6dfa6ef6a4e29befc977476";
 export const TROVE_NFT_ADDRESS = "0x7739f3ecb72a64783a48ccc300b7b936a217b53871dd7b0efa9c14e1b23854b";
+export const STABILITY_POOL_ADDRESS = "0x724b2bcb7d267d9745388fa11a044049da489c9dea902533114768ea930d1dc";
 
 export const BORROWER_OPERATIONS_ABI = [
   {

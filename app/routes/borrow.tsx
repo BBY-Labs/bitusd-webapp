@@ -50,9 +50,11 @@ import {
   TBTC_ADDRESS,
   TBTC_SYMBOL,
   BORROWER_OPERATIONS_ABI,
+  TROVE_MANAGER_ABI,
   BORROWER_OPERATIONS_ADDRESS,
   TBTC_ABI,
   BITUSD_ADDRESS,
+  TM_ADDRESS,
 } from "~/lib/constants";
 
 const createBorrowFormSchema = (
@@ -156,6 +158,7 @@ function Borrow() {
     undefined
   );
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [selfManagedRate, setSelfManagedRate] = useState(5);
 
   const trpc = useTRPC();
   const {
@@ -197,6 +200,38 @@ function Borrow() {
     abi: BORROWER_OPERATIONS_ABI,
     address: BORROWER_OPERATIONS_ADDRESS,
   });
+
+  const { contract: troveManagerContract } = useContract({
+    abi: TROVE_MANAGER_ABI,
+    address: TM_ADDRESS,
+  });
+
+  // Fetch owner's positions to determine owner_index
+  const { data: ownerPositions, isLoading: isLoadingOwnerPositions } = useQuery({
+    queryKey: ["ownerPositions", address, TM_ADDRESS],
+    queryFn: async () => {
+      if (!troveManagerContract || !address) return null;
+      try {
+        const positions = await troveManagerContract.get_owner_to_positions(address);
+        return positions as bigint[]; // Assuming positions is an array of bigints (u256)
+      } catch (e) {
+        console.error("Error fetching owner positions:", e);
+        return null;
+      }
+    },
+    enabled: !!troveManagerContract && !!address,
+    refetchInterval: 30000, // Optional: refetch periodically
+  });
+
+  const ownerIndex = useMemo(() => {
+    if (ownerPositions && Array.isArray(ownerPositions)) {
+      return BigInt(ownerPositions.length);
+    }
+    // Default to 0n if positions are not yet loaded or an error occurred,
+    // or if you prefer to wait, return undefined and adjust `calls` dependencies.
+    // For opening a new trove, if this is the *first* for the owner, length 0 is correct.
+    return 0n;
+  }, [ownerPositions]);
 
   // Auto-updating validation based on all dependencies
   const formErrors = useMemo(() => {
@@ -296,6 +331,8 @@ function Borrow() {
         return BigInt(5 * 1e16); // 5% as 18-decimal number
       case "variable":
         return BigInt(4.5 * 1e16); // 4.5% as 18-decimal number
+      case "selfManaged":
+        return BigInt(selfManagedRate * 1e16); // Use slider value
       default:
         return BigInt(5 * 1e16);
     }
@@ -307,7 +344,9 @@ function Borrow() {
       borrowerContract &&
       address &&
       collateralAmount &&
-      borrowAmount
+      borrowAmount &&
+      !isLoadingOwnerPositions && // Ensure ownerIndex is derived from loaded data
+      ownerIndex !== undefined // ownerIndex is now calculated above
       ? [
         // 1. Approve TBTC spending
         tbtcContract.populate("approve", [
@@ -317,7 +356,7 @@ function Borrow() {
         // 2. Open trove
         borrowerContract.populate("open_trove", [
           address, // owner
-          0n, // owner_index (first trove)
+          ownerIndex, // owner_index (DYNAMICALLY SET)
           BigInt(Math.floor(collateralAmount * 1e18)), // coll_amount in wei
           BigInt(Math.floor(borrowAmount * 1e18)), // bitusd_amount in wei
           0n, // upper_hint
@@ -822,16 +861,59 @@ function Borrow() {
                     )}
                     <div className="flex items-center mb-1">
                       <h4 className="text-base font-semibold text-slate-800">
-                        Self Managed
+                        Self Managed ({selfManagedRate}%)
                       </h4>
                     </div>
                     <p
-                      className={`text-xs text-slate-600 ${selectedRate === "selfManaged" ? "" : "invisible"
+                      className={`text-xs text-slate-600 mb-3 ${selectedRate === "selfManaged" ? "" : "invisible"
                         }`}
                     >
                       Take control of your interest rate by actively managing
                       your position.
                     </p>
+
+                    {/* Interest Rate Slider */}
+                    {selectedRate === "selfManaged" && (
+                      <div className="mt-3">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-xs font-medium text-slate-700">
+                            Interest Rate
+                          </span>
+                          <span className="text-xs font-bold text-blue-600">
+                            {selfManagedRate}%
+                          </span>
+                        </div>
+
+                        <div className="relative">
+                          {/* Custom colored track background */}
+                          <div className="absolute left-0 top-1/2 h-1.5 w-full -translate-y-1/2 rounded-full overflow-hidden">
+                            {/* Gray background for the entire track */}
+                            <div className="absolute left-0 top-0 h-full w-full bg-slate-200"></div>
+
+                            {/* Colored portion based on current value */}
+                            <div
+                              className="absolute left-0 top-0 h-full bg-blue-500 transition-all duration-300"
+                              style={{ width: `${((selfManagedRate - 0.5) / 19.5) * 100}%` }}
+                            ></div>
+                          </div>
+
+                          {/* Slider component */}
+                          <Slider
+                            value={[selfManagedRate]}
+                            onValueChange={(value) => setSelfManagedRate(value[0])}
+                            min={0.5}
+                            max={20}
+                            step={0.1}
+                            className="z-10"
+                          />
+                        </div>
+
+                        <div className="flex justify-between text-xs text-slate-500 mt-1">
+                          <span>0.5%</span>
+                          <span>20%</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

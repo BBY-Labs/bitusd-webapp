@@ -12,11 +12,21 @@ import {
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Separator } from "~/components/ui/separator";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTRPC } from "~/lib/trpc";
-import { useAccount } from "@starknet-react/core";
+import {
+    useAccount,
+    useBalance,
+    useContract,
+    useSendTransaction,
+} from "@starknet-react/core";
 import { MAX_LIMIT } from "~/lib/utils/calc";
+import {
+    BITUSD_ADDRESS,
+    STABILITY_POOL_ABI,
+    STABILITY_POOL_ADDRESS,
+} from "~/lib/constants";
 
 // TODO: Define a schema for stake form validation if needed
 const createStakeFormSchema = (maxBalance?: number) =>
@@ -44,13 +54,60 @@ function StakePage() {
     });
     const currentInterestRate = interestRateData?.rate;
 
-    // TODO: Replace with actual tRPC query or StarkNet call to fetch user's bitUSD balance
-    const { data: bitUSDBalanceData } = useQuery({
-        queryKey: ["userBitUSDBalance", address],
-        queryFn: async () => ({ balance: 1000 }), // Placeholder: 1000 bitUSD
-        enabled: !!address,
+    // Set up bitUSD contract with balance_of function
+    const { contract: bitUSDContract } = useContract({
+        abi: [
+            {
+                type: "function",
+                name: "approve",
+                inputs: [
+                    {
+                        name: "spender",
+                        type: "core::starknet::contract_address::ContractAddress",
+                    },
+                    {
+                        name: "amount",
+                        type: "core::integer::u256",
+                    },
+                ],
+                outputs: [{ type: "core::bool" }],
+                state_mutability: "external",
+            },
+            {
+                type: "function",
+                name: "balance_of",
+                inputs: [
+                    {
+                        name: "account",
+                        type: "core::starknet::contract_address::ContractAddress",
+                    },
+                ],
+                outputs: [{ type: "core::integer::u256" }],
+                state_mutability: "view",
+            },
+        ] as const,
+        address: BITUSD_ADDRESS,
     });
-    const bitUSDBalance = bitUSDBalanceData?.balance;
+
+    // Custom balance query using the contract directly
+    const { data: bitUSDBalanceData, isLoading: isBalanceLoading, error: balanceError } = useQuery({
+        queryKey: ["bitUSDBalance", address],
+        queryFn: async () => {
+            if (!bitUSDContract || !address) return null;
+            try {
+                const balance = await bitUSDContract.balance_of(address);
+                return {
+                    value: balance,
+                    formatted: (Number(balance) / 1e18).toString(),
+                };
+            } catch (error) {
+                console.error("Error fetching bitUSD balance:", error);
+                return null;
+            }
+        },
+        enabled: !!bitUSDContract && !!address,
+        refetchInterval: 10000, // Refetch every 10 seconds
+    });
 
     // TODO: Fetch bitUSD price if needed to show value, similar to borrow.tsx
     const { data: bitUSDPriceData } = useQuery(
@@ -58,8 +115,59 @@ function StakePage() {
     );
     const bitUSDPrice = bitUSDPriceData?.price || 1; // Default to 1 if not fetched
 
+    // Set up contracts with proper ABI types
+    const { contract: stabilityPoolContract } = useContract({
+        abi: STABILITY_POOL_ABI,
+        address: STABILITY_POOL_ADDRESS,
+    });
+
+    // Fetch user's compounded deposit in the stability pool
+    const { data: stakedAmountData, isLoading: isLoadingStakedAmount } = useQuery({
+        queryKey: ["stakedAmount", address, STABILITY_POOL_ADDRESS],
+        queryFn: async () => {
+            if (!stabilityPoolContract || !address) return null;
+            try {
+                const amount = await stabilityPoolContract.get_compounded_bitusd_deposit(address);
+                return amount;
+            } catch (error) {
+                console.error("Error fetching staked amount:", error);
+                return null;
+            }
+        },
+        enabled: !!stabilityPoolContract && !!address,
+        refetchInterval: 10000, // Refetch every 10 seconds
+    });
+
+    // Fetch user's claimable yield gain from the stability pool
+    const { data: claimableRewardsData, isLoading: isLoadingClaimableRewards } = useQuery({
+        queryKey: ["claimableRewards", address, STABILITY_POOL_ADDRESS],
+        queryFn: async () => {
+            if (!stabilityPoolContract || !address) return null;
+            try {
+                const rewards = await stabilityPoolContract.get_depositor_yield_gain(address);
+                return rewards;
+            } catch (error) {
+                console.error("Error fetching claimable rewards:", error);
+                return null;
+            }
+        },
+        enabled: !!stabilityPoolContract && !!address,
+        refetchInterval: 10000, // Refetch every 10 seconds
+    });
+
+    // Use the custom balance data
+    const bitUSDBalance = bitUSDBalanceData;
+
     const validateAndUpdateFormState = (currentStakeAmount: number | undefined) => {
-        const schema = createStakeFormSchema(bitUSDBalance);
+        let maxBalanceForSchema: number | undefined = undefined;
+        if (bitUSDBalance?.value) {
+            const rawMaxBalance = Number(bitUSDBalance.value) / 1e18;
+            // Round maxBalance to 7 decimal places to match NumericFormat's precision
+            // This helps prevent floating point comparison issues.
+            maxBalanceForSchema = parseFloat(rawMaxBalance.toFixed(7));
+        }
+
+        const schema = createStakeFormSchema(maxBalanceForSchema);
         const validationResult = schema.safeParse({
             stakeAmount: currentStakeAmount,
         });
@@ -78,29 +186,74 @@ function StakePage() {
     };
 
     const handleMaxClick = () => {
-        if (bitUSDBalance !== undefined) {
-            setStakeAmount(bitUSDBalance);
-            validateAndUpdateFormState(bitUSDBalance);
+        if (bitUSDBalance?.value) {
+            const rawMaxBalance = Number(bitUSDBalance.value) / 1e18;
+            // Set state with the raw max balance. NumericFormat will handle display rounding.
+            setStakeAmount(rawMaxBalance);
+            // Validate with the raw max balance, validateAndUpdateFormState will handle precision for schema.
+            validateAndUpdateFormState(rawMaxBalance);
         }
     };
 
+    // Create batched transaction calls
+    const calls =
+        bitUSDContract &&
+            stabilityPoolContract &&
+            address &&
+            stakeAmount &&
+            stakeAmount > 0
+            ? [
+                // 1. Approve bitUSD spending
+                bitUSDContract.populate("approve", [
+                    STABILITY_POOL_ADDRESS,
+                    BigInt(Math.floor(stakeAmount * 1e18)), // Approve exact stake amount
+                ]),
+                // 2. Provide to stability pool
+                stabilityPoolContract.populate("provide_to_sp", [
+                    BigInt(Math.floor(stakeAmount * 1e18)), // top_up amount in wei
+                    false, // do_claim = false
+                ]),
+            ]
+            : undefined;
+
+    // Set up the transaction
+    const { send, isPending, isSuccess, error } = useSendTransaction({ calls });
+
     const getButtonText = () => {
         if (formErrors) {
-            // You can add more specific error messages if needed
             return "Check Input";
+        }
+        if (isPending) {
+            return "Staking...";
+        }
+        if (isSuccess) {
+            return "Staked Successfully";
         }
         return "Stake bitUSD";
     };
 
-    // TODO: Implement the actual staking logic
+    // Updated stake submit handler
     const handleStakeSubmit = () => {
-        if (!formErrors && stakeAmount && stakeAmount > 0) {
-            console.log("Staking:", stakeAmount, "bitUSD for address:", address);
-            // Here you would call the StarkNet contract function to stake
-            // e.g., using starknet-react's useContractWrite or a tRPC mutation that handles it
-            alert(`Staking ${stakeAmount} bitUSD (not implemented yet)`);
+        if (calls && !formErrors && stakeAmount && stakeAmount > 0) {
+            send();
         }
     };
+
+    // Debug logging
+    console.log("bitUSD Balance debug:", {
+        data: bitUSDBalance,
+        isLoading: isBalanceLoading,
+        error: balanceError,
+        address: address,
+        tokenAddress: BITUSD_ADDRESS,
+        contract: bitUSDContract
+    });
+    console.log("Staking Info debug:", {
+        stakedAmount: stakedAmountData,
+        isLoadingStaked: isLoadingStakedAmount,
+        claimableRewards: claimableRewardsData,
+        isLoadingClaimable: isLoadingClaimableRewards,
+    });
 
     return (
         <div className="mx-auto max-w-7xl py-8 px-4 sm:px-6 lg:px-8 min-h-screen">
@@ -127,7 +280,7 @@ function StakePage() {
                         </CardHeader>
                         <CardContent className="pt-2 space-y-6">
                             <div className="bg-slate-50 rounded-xl p-4 space-y-3 group">
-                                {/* Row 1: Label and Balance */}
+                                {/* Row 1: Label and Max Button */}
                                 <div className="flex justify-between items-center">
                                     <Label
                                         htmlFor="stakeAmount"
@@ -135,12 +288,17 @@ function StakePage() {
                                     >
                                         You stake
                                     </Label>
-                                    <p className="text-xs text-slate-500">
-                                        Balance:{" "}
-                                        {bitUSDBalance !== undefined
-                                            ? `${bitUSDBalance.toLocaleString()} bitUSD`
-                                            : "Loading..."}
-                                    </p>
+                                    {/* Always show Max button if user is connected */}
+                                    {address && (
+                                        <Button
+                                            variant="outline"
+                                            onClick={handleMaxClick}
+                                            disabled={!bitUSDBalance?.value || Number(bitUSDBalance.value) === 0}
+                                            className="h-6 px-2 text-xs rounded-md bg-white border-slate-200 hover:bg-slate-100 transition-colors font-medium"
+                                        >
+                                            Max.
+                                        </Button>
+                                    )}
                                 </div>
 
                                 {/* Row 2: Input and Token Display */}
@@ -174,9 +332,9 @@ function StakePage() {
                                     </div>
                                 </div>
 
-                                {/* Row 3: Dollar Value and Max Button */}
+                                {/* Row 3: Dollar Value and Balance */}
                                 <div className="flex justify-between items-center space-x-4">
-                                    <div className="flex-grow"> {/* This div helps push the Max button to the right */}
+                                    <div className="flex-grow">
                                         <NumericFormat
                                             className="text-sm text-slate-500 mt-1"
                                             displayType="text"
@@ -197,13 +355,27 @@ function StakePage() {
                                             ) : null
                                         )}
                                     </div>
-                                    <Button
-                                        variant="outline"
-                                        onClick={handleMaxClick}
-                                        className="h-6 px-2 text-xs rounded-md bg-white border-slate-200 hover:bg-slate-100 transition-colors font-medium"
-                                    >
-                                        Max.
-                                    </Button>
+                                    <div className="text-xs text-slate-500">
+                                        {isBalanceLoading ? (
+                                            "Balance: Loading..."
+                                        ) : balanceError ? (
+                                            "Balance: Error"
+                                        ) : bitUSDBalance?.value !== undefined ? (
+                                            <>
+                                                Balance:{" "}
+                                                <NumericFormat
+                                                    displayType="text"
+                                                    value={Number(bitUSDBalance.value) / 1e18}
+                                                    thousandSeparator=","
+                                                    decimalScale={3}
+                                                    fixedDecimalScale
+                                                />{" "}
+                                                bitUSD
+                                            </>
+                                        ) : (
+                                            "Balance: 0 bitUSD"
+                                        )}
+                                    </div>
                                 </div>
                             </div>
 
@@ -213,7 +385,8 @@ function StakePage() {
                                     !!formErrors ||
                                     !stakeAmount ||
                                     stakeAmount <= 0 ||
-                                    !address // Ensure user is connected
+                                    !address || // Ensure user is connected
+                                    isPending
                                 }
                                 className="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-medium py-3 px-6 rounded-xl shadow-sm hover:shadow transition-all text-base"
                             >
@@ -238,13 +411,33 @@ function StakePage() {
                             </div>
                             <div className="flex justify-between text-sm items-center">
                                 <span className="text-slate-600">Your Staked Amount</span>
-                                {/* TODO: Fetch and display current staked amount for the user */}
-                                <span className="font-semibold text-slate-800">0 bitUSD</span>
+                                <span className="font-semibold text-slate-800">
+                                    {isLoadingStakedAmount ? "Loading..." : stakedAmountData !== null && stakedAmountData !== undefined ? (
+                                        <NumericFormat
+                                            displayType="text"
+                                            value={Number(stakedAmountData) / 1e18}
+                                            thousandSeparator=","
+                                            decimalScale={3}
+                                            fixedDecimalScale
+                                            suffix=" bitUSD"
+                                        />
+                                    ) : "0 bitUSD"}
+                                </span>
                             </div>
                             <div className="flex justify-between text-sm items-center">
                                 <span className="text-slate-600">Claimable</span>
-                                {/* TODO: Fetch and display earned rewards */}
-                                <span className="font-semibold text-slate-800">0 bitUSD</span>
+                                <span className="font-semibold text-slate-800">
+                                    {isLoadingClaimableRewards ? "Loading..." : claimableRewardsData !== null && claimableRewardsData !== undefined ? (
+                                        <NumericFormat
+                                            displayType="text"
+                                            value={Number(claimableRewardsData) / 1e18}
+                                            thousandSeparator=","
+                                            decimalScale={3}
+                                            fixedDecimalScale
+                                            suffix=" bitUSD"
+                                        />
+                                    ) : "0 bitUSD"}
+                                </span>
                             </div>
                             <Separator className="bg-slate-100 my-2" />
                         </CardContent>
@@ -254,7 +447,7 @@ function StakePage() {
                                 variant="outline"
                                 className="w-full border-blue-500 text-blue-500 hover:bg-blue-50 hover:text-blue-600"
                                 onClick={() => alert("Claiming rewards (not implemented yet)")}
-                            // TODO: Disable if no rewards to claim, e.g. disabled={pendingRewards <= 0}
+                                disabled={!claimableRewardsData || Number(claimableRewardsData) === 0}
                             >
                                 Claim Pending Rewards
                             </Button>

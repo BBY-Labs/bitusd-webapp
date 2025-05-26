@@ -3,16 +3,21 @@ import type { Abi } from "starknet";
 export const INTEREST_RATE_SCALE_DOWN_FACTOR = 10n ** 16n;
 
 export const TBTC_ADDRESS =
-  "0x25e09b7c20159bcbbc483f45f356f3fc792052a1ebc0fa0a2563259499d964a";
+  "0x48308747f280d4d48910f920cd4959bd405cf504b4ee09cae7e9fc8ed1f1d67";
 
 export const BITUSD_ADDRESS =
-  "0x5ef3d8bc4cab0542c799332419d042db8ccabc704c74f23f349f9e302162bd";
+  "0x6feeca6bdb67f098e4c728b3c942d4b714b13a3a6ff3e7ebc902c25a408d13b";
+
+export const PRICE_FEED_BTC = "0x4db7a80e186f604fa30e173448d41047e2753be00918c932e689565930a18b6";
 
 export const TBTC_DECIMALS = 18;
 
 export const TBTC_SYMBOL = "TBTC";
 
 export const TBTC_NAME = "Testnet Bitcoin";
+
+export const PRICE_FEED_ABI =
+  [{ "type": "impl", "name": "IPriceFeedMockImpl", "interface_name": "bit_usd::mocks::PriceFeedMock::IPriceFeedMock" }, { "type": "struct", "name": "core::integer::u256", "members": [{ "name": "low", "type": "core::integer::u128" }, { "name": "high", "type": "core::integer::u128" }] }, { "type": "interface", "name": "bit_usd::mocks::PriceFeedMock::IPriceFeedMock", "items": [{ "type": "function", "name": "fetch_price", "inputs": [], "outputs": [{ "type": "core::integer::u256" }], "state_mutability": "view" }, { "type": "function", "name": "fetch_redemption_price", "inputs": [], "outputs": [{ "type": "core::integer::u256" }], "state_mutability": "view" }] }, { "type": "event", "name": "bit_usd::mocks::PriceFeedMock::PriceFeedMock::Event", "kind": "enum", "variants": [] }];
 
 export const TBTC_ABI = [
   {
@@ -771,21 +776,21 @@ export const TROVE_MANAGER_ABI = [
 ] as const satisfies Abi;
 
 export const BORROWER_OPERATIONS_ADDRESS =
-  "0x7362108a497aac0328a1df2b2699cb07df805bb05a180b69c6431e8c0443c03";
+  "0x78c4cf9487ed62e1d0493e2ced5fba1a7967821b724570b43168cc1c3ee5125";
 export const AP_ADDRESS =
-  "0xe289cc8e3a4954a1c86a53e32af625291a242765d551ab14f082247a75bbff";
+  "0x3c48071797a190796702afc65662193dd64a3c0f804f4bb10585bddc854e7da";
 export const COLL_SURPLUS_ADDRESS =
-  "0x4f2d15bb8dbf6521328e904f2e5546f66d3dc58c2329b339ba57091ff4ce7a8";
+  "0x22af123449ea2128ebf55e28fd3e42fb7c6c2f6d2fdbfcce270e617656c1947";
 export const DEFAULT_POOL_ADDRESS =
-  "0x7f59e185e96440c06e6aa38b2a5e999cf0ef2920be55c38f6e41815b44d004";
+  "0x42bc9a14c28f61bbdd58bb869878089d66ba81b535b80896f35ff5fbe5f020e";
 export const SORTED_TROVES_ADDRESS =
-  "0xcd88dffb139c619452b078a2f6aba87541e5cec08fa0f63b0ab2dd17cda10b";
+  "0x567b1898ed5d0c605e885630c97ced5e0c621fae596813cbd9e1c96cefb4ca8";
 export const TM_ADDRESS =
-  "0x119b8feaa5585d99023185a1ea42086bc125ee4c6dfa6ef6a4e29befc977476";
+  "0x4a4f2b83d0fbd3413a49c489f9f66f57127414b4a5dd8d12eef74b926d0fa77";
 export const TROVE_NFT_ADDRESS =
-  "0x7739f3ecb72a64783a48ccc300b7b936a217b53871dd7b0efa9c14e1b23854b";
+  "0x2b953c32396151e9e043647bad6e3537a7c9d691f7f1d621dea1b8258065b9";
 export const STABILITY_POOL_ADDRESS =
-  "0x724b2bcb7d267d9745388fa11a044049da489c9dea902533114768ea930d1dc";
+  "0x674956bd771f47d57ad4f8078ad6db2ba7ff37d5622627097dc935fcfb3ec73";
 
 export const BORROWER_OPERATIONS_ABI = [
   {

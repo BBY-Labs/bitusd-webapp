@@ -179,6 +179,7 @@ function Borrow() {
   const { data: bitcoinBalance } = useBalance({
     token: TBTC_ADDRESS,
     address: address,
+    watch: true,
   });
 
   // Store transaction details for success screen

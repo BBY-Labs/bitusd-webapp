@@ -36,9 +36,10 @@ export function useOwnerPositions(options: UseOwnerPositionsOptions = {}) {
       }
     },
     enabled: !!troveManagerContract && !!address && enabled,
-    ...(options.refetchInterval && {
-      refetchInterval: options.refetchInterval,
-    }),
+    refetchInterval: 30000,
+    // ...(options.refetchInterval && {
+    //   refetchInterval: options.refetchInterval,
+    // }),
   });
 
   const ownerIndex = useMemo(() => {

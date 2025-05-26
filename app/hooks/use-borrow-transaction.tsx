@@ -112,31 +112,20 @@ export function useBorrowTransaction({
   const isTransactionError = transaction.isError || isReceiptError;
   const transactionError = transaction.error || receiptError || null;
 
-  // Invalidate once when receipt is successful
-  if (
-    isTransactionSuccess &&
-    receipt &&
-    transaction.data?.transaction_hash &&
-    invalidatedRef.current !== transaction.data.transaction_hash &&
-    address && // Ensure address is defined
-    chainId // Ensure chainId is defined
-  ) {
-    invalidatedRef.current = transaction.data.transaction_hash;
-    queryClient.invalidateQueries({
-      queryKey: ["ownerPositions", address, TM_ADDRESS],
-    });
-    queryClient.invalidateQueries({
-      queryKey: [
-        {
-          entity: "balance",
-          chainId: chainId,
-          token: TBTC_ADDRESS,
-          address: address,
-          blockIdentifier: "latest",
-        },
-      ],
-    });
-  }
+  // // Invalidate once when receipt is successful
+  // if (
+  //   isTransactionSuccess &&
+  //   receipt &&
+  //   transaction.data?.transaction_hash &&
+  //   invalidatedRef.current !== transaction.data.transaction_hash &&
+  //   address && // Ensure address is defined
+  //   chainId // Ensure chainId is defined
+  // ) {
+  //   invalidatedRef.current = transaction.data.transaction_hash;
+  //   queryClient.invalidateQueries({
+  //     queryKey: ["ownerPositions", address, TM_ADDRESS],
+  //   });
+  // }
 
   return {
     ...transaction,

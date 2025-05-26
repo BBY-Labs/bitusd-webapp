@@ -28,18 +28,6 @@ export function GetTestBtc() {
         ? [contract.populate("mint", [address, 1000000000000000000n])] // Mint 1 testBTC (1 * 10^18)
         : undefined,
     onSuccess: () => {
-      // Invalidate the balance query to refresh the balance
-      queryClient.invalidateQueries({
-        queryKey: [
-          {
-            entity: "balance",
-            chainId: chainId,
-            token: TBTC_ADDRESS,
-            address: address,
-            blockIdentifier: "latest",
-          },
-        ],
-      });
       toast.success("Successfully minted 1 testBTC");
     },
     onError: (error) => {
